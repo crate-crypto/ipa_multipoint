@@ -247,22 +247,37 @@ impl NoZK {
     }
 }
 
+pub fn slow_vartime_multiscalar_mul2<'a>(
+    scalars: impl Iterator<Item = &'a Fr>,
+    points: impl Iterator<Item = &'a EdwardsProjective>,
+) -> EdwardsProjective {
+    use rayon::prelude::*;
+
+    let points: Vec<_> = points.collect();
+    let scalars: Vec<_> = scalars.collect();
+
+    points
+        .into_par_iter()
+        .zip(scalars.into_par_iter())
+        .map(|(point, scalar)| {
+            let point_aff = point.into_affine();
+            let psi_point = EdwardsParameters::endomorphism(&point_aff);
+            let (s1, s2) = EdwardsParameters::scalar_decomposition(scalar);
+
+            let partial_res = multi_scalar_mul(&point_aff, &s1, &psi_point, &s2);
+            partial_res
+        })
+        .reduce(|| EdwardsProjective::zero(), |res, val| res + val)
+}
 // TODO: use pippenger with endomorphism
 pub fn slow_vartime_multiscalar_mul<'a>(
     scalars: impl Iterator<Item = &'a Fr>,
     points: impl Iterator<Item = &'a EdwardsProjective>,
 ) -> EdwardsProjective {
-    let mut res = EdwardsProjective::default();
-    for (point, scalar) in points.into_iter().zip(scalars.into_iter()) {
-        let point_aff = point.into_affine();
-        let psi_point = EdwardsParameters::endomorphism(&point_aff);
-        let (s1, s2) = EdwardsParameters::scalar_decomposition(scalar);
-
-        let partial_res = multi_scalar_mul(&point_aff, &s1, &psi_point, &s2);
-        res += partial_res;
-    }
-
-    res
+    use ark_ec::msm::VariableBaseMSM;
+    let scalars: Vec<_> = scalars.into_iter().map(|s| s.into_repr()).collect();
+    let points: Vec<_> = points.map(|p| p.into_affine()).collect();
+    VariableBaseMSM::multi_scalar_mul(&points, &scalars)
 }
 
 fn generate_challenges(proof: &NoZK, transcript: &mut Transcript) -> Vec<Fr> {
