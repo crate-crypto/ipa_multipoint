@@ -33,4 +33,6 @@ Machine : 2.4 GHz 8-Core Intel Core i9
 
 - To verify a multi-opening proof of 20,000 polynomials: `604.15ms`
 
+These benchmarks are tentative because on one hand, the machine being used may not be the what the average user uses, while on the other hand, we have not optimised the verifier algorithm to remove `bH` and the pippenger algorithm does not take into consideration GLV. 
+
 Prover algorithm has not been refactored yet, so benchmarks are coming soon (TM)
