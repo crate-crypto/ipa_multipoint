@@ -290,7 +290,6 @@ mod tests {
     use ark_std::rand::SeedableRng;
     use ark_std::UniformRand;
     use rand_chacha::ChaCha20Rng;
-    use sha3::Sha3_512;
     use std::iter;
     #[test]
     fn test_create_nozk_proof() {

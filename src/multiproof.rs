@@ -19,7 +19,6 @@ use bandersnatch::EdwardsParameters;
 use bandersnatch::EdwardsProjective;
 use bandersnatch::Fr;
 use merlin::Transcript;
-use sha3::Sha3_512;
 pub struct CRS {
     n: usize,
     G: Vec<EdwardsProjective>,

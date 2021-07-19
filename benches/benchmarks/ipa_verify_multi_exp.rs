@@ -9,7 +9,6 @@ use ipa_bandersnatch::slow_vartime_multiscalar_mul;
 use ipa_bandersnatch::transcript::TranscriptProtocol;
 use merlin::Transcript;
 use rand_chacha::ChaCha20Rng;
-use sha3::Sha3_512;
 use std::iter;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
