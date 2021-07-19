@@ -256,7 +256,7 @@ where
     J::Item: std::borrow::Borrow<EdwardsProjective>,
 {
     let mut res = EdwardsProjective::default();
-    for (point, scalar) in points.into_iter().zip(scalars.into_iter().into_iter()) {
+    for (point, scalar) in points.into_iter().zip(scalars.into_iter()) {
         let point_aff = point.borrow().into_affine();
         let psi_point = EdwardsParameters::endomorphism(&point_aff);
         let (s1, s2) = EdwardsParameters::scalar_decomposition(scalar.borrow());
