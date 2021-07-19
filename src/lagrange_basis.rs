@@ -234,14 +234,6 @@ impl LagrangeBasis {
             .map(|element| point - element)
             .product();
         summand * a_z
-
-        // let lag_evals = LagrangeBasis::evaluate_lagrange_coefficients(precomp, self.domain, point);
-
-        // let mut result = Fr::zero();
-        // for (l_i, y_i) in lag_evals.into_iter().zip(self.values.iter()) {
-        //     result += l_i * y_i
-        // }
-        // result
     }
 }
 
@@ -272,7 +264,19 @@ fn simple_eval_outside_domain() {
 
     let got = numerator_lag.evaluate_outside_domain(&precomp, point);
     let expected = numerator_coeff.evaluate(&point);
+    assert_eq!(got, expected);
 
+    // Another way to evaluate a point not in the domain,
+    // is to compute the lagrange coefficients first and then take the inner product of those and
+    // the evaluation points
+
+    let lag_evals =
+        LagrangeBasis::evaluate_lagrange_coefficients(&precomp, numerator_lag.domain, point);
+
+    let mut got = Fr::zero();
+    for (l_i, y_i) in lag_evals.into_iter().zip(numerator_lag.values().iter()) {
+        got += l_i * y_i
+    }
     assert_eq!(got, expected)
 }
 #[test]
