@@ -18,4 +18,19 @@ A polynomial commitment scheme for opening multiple polynomials at different poi
 
 ## API
 
-The OpeningProof should not carry `P` as the verifier re-computes it.
+- The OpeningProof should not carry `P` as the verifier re-computes it.
+- We should wrap the IPA proof in a poly commit struct, so that users cannot mix up the `a_vec` and `b_vec`, we will not commit to `b_vec` as a poly-commit
+
+## Tentative benchmarks
+
+
+
+Machine : 2.4 GHz 8-Core Intel Core i9
+
+- To verify the opening of a polynomial of degree 255 (256 points in lagrange basis): `23.048ms`
+
+- To verify a multi-opening proof of 10,000 polynomials: `390.67ms`
+
+- To verify a multi-opening proof of 20,000 polynomials: `604.15ms`
+
+Prover algorithm has not been refactored yet, so benchmarks are coming soon (TM)
