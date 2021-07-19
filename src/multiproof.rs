@@ -30,12 +30,19 @@ struct CRS {
 impl CRS {
     pub fn new(n: usize) -> CRS {
         let G: Vec<EdwardsProjective> = (0..n)
-            .map(|_| EdwardsProjective::prime_subgroup_generator())
+            .map(|i| {
+                EdwardsProjective::prime_subgroup_generator().mul(Fr::from(i as u128).into_repr())
+            })
             .collect();
         let H: Vec<EdwardsProjective> = (0..n)
-            .map(|_| EdwardsProjective::prime_subgroup_generator())
+            .map(|i| {
+                EdwardsProjective::prime_subgroup_generator()
+                    .mul(Fr::from((i + n) as u128).into_repr())
+            })
             .collect();
-        let Q = EdwardsProjective::prime_subgroup_generator();
+
+        let Q = EdwardsProjective::prime_subgroup_generator()
+            .mul(Fr::from((2 * n) as u128).into_repr());
 
         CRS { n, G, H, Q }
     }
