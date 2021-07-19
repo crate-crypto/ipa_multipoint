@@ -7,8 +7,6 @@ use std::{
     ops::{Add, Mul, Sub},
 };
 
-use crate::multiproof::ruffini;
-
 #[derive(Clone, Debug)]
 pub struct LagrangeBasis {
     // We assume that the domain starts at zero,
@@ -293,9 +291,7 @@ fn simple_division() {
     let quotient_lag = numerator_lag.divide_by_linear_vanishing(&precomp, index);
     let quotient_coeff = quotient_lag.interpolate();
 
-    let quotient_expected2 = &numerator_coeff / &denom_coeff;
-    let quotient_expected = ruffini(&numerator_lag.interpolate(), &Fr::one());
-    assert_eq!(quotient_expected, quotient_expected2);
+    let quotient_expected = &numerator_coeff / &denom_coeff;
 
     assert_eq!(quotient_expected, quotient_coeff)
 }
