@@ -4,6 +4,7 @@
 use crate::ipa::{self, NoZK};
 use crate::lagrange_basis::{LagrangeBasis, PrecomputedWeights};
 use crate::math_utils::inner_product;
+use crate::math_utils::powers_of;
 use crate::slow_vartime_multiscalar_mul;
 use crate::transcript::TranscriptProtocol;
 use ark_ec::ProjectiveCurve;
@@ -19,7 +20,6 @@ use bandersnatch::EdwardsProjective;
 use bandersnatch::Fr;
 use merlin::Transcript;
 use sha3::Sha3_512;
-
 struct CRS {
     n: usize,
     G: Vec<EdwardsProjective>,
@@ -314,16 +314,6 @@ impl MultiOpen {
 
         OpeningProof { P, t, ipa: no_zk }
     }
-}
-
-fn powers_of(point: Fr, n: usize) -> Vec<Fr> {
-    let mut powers = Vec::with_capacity(n);
-    powers.push(Fr::one());
-
-    for i in 1..n {
-        powers.push(powers[i - 1] * point);
-    }
-    powers
 }
 
 #[test]
