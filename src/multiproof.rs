@@ -119,13 +119,11 @@ impl MultiOpen {
             .zip(queries.iter())
             .map(|(r_i, query)| {
                 let f_x = &query.poly;
-                // We apply an optimisation only available for monomial basis
-                // f(x) - y / X - z gives the same quotient as f(x) / X - z
-                // This means we can drop the `y`
-                let _y = &query.y_i;
+
+                let y = &query.y_i;
                 let x = &query.x_i;
 
-                (f_x.clone() - _y).divide_by_linear_vanishing(precomp, *x) * *r_i
+                (f_x - y).divide_by_linear_vanishing(precomp, *x) * *r_i
             })
             .fold(LagrangeBasis::zero(), |mut res, val| {
                 res = res + val;

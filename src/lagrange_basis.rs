@@ -50,6 +50,13 @@ impl Sub<&Fr> for LagrangeBasis {
         self
     }
 }
+impl Sub<&Fr> for &LagrangeBasis {
+    type Output = LagrangeBasis;
+
+    fn sub(self, rhs: &Fr) -> Self::Output {
+        LagrangeBasis::new(self.values.iter().map(|values| *values - rhs).collect())
+    }
+}
 
 pub struct PrecomputedWeights {
     // This stores A'(x_i) and 1/A'(x_i)
