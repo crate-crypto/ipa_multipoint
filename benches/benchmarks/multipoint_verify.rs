@@ -31,7 +31,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let poly = LagrangeBasis::new((0..n).map(|_| Fr::rand(&mut rng)).collect());
     let poly_comm = crs.commit_lagrange_poly(&poly);
 
-    for num_polynomials in [10_000] {
+    for num_polynomials in [10_000, 20_000] {
         // For verification, we simply generate one polynomial and then clone it `num_polynomial`
         // time.  whether it is the same polynomial or different polynomial does not affect verification.
         let mut polys: Vec<LagrangeBasis> = Vec::with_capacity(num_polynomials);
