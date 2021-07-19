@@ -245,11 +245,8 @@ impl MultiOpenProof {
         let g_t = self.g_1_eval - g2_t;
 
         //5. Compute [g_1(X)]
-        let g1_comm: EdwardsProjective = helper_scalars
-            .into_iter()
-            .zip(queries)
-            .map(|(r_i_den_inv, query)| query.comm.mul(r_i_den_inv.into_repr()))
-            .sum();
+        let comms: Vec<_> = queries.into_iter().map(|query| query.comm).collect();
+        let g1_comm = slow_vartime_multiscalar_mul(helper_scalars.iter(), comms.iter());
 
         transcript.append_point(b"g1_x", &g1_comm);
 
