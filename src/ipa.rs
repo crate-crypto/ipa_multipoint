@@ -248,18 +248,15 @@ impl NoZK {
 }
 
 // TODO: use pippenger with endomorphism
-pub fn slow_vartime_multiscalar_mul<I, J>(scalars: I, points: J) -> EdwardsProjective
-where
-    I: IntoIterator,
-    I::Item: std::borrow::Borrow<Fr>,
-    J: IntoIterator,
-    J::Item: std::borrow::Borrow<EdwardsProjective>,
-{
+pub fn slow_vartime_multiscalar_mul<'a>(
+    scalars: impl Iterator<Item = &'a Fr>,
+    points: impl Iterator<Item = &'a EdwardsProjective>,
+) -> EdwardsProjective {
     let mut res = EdwardsProjective::default();
     for (point, scalar) in points.into_iter().zip(scalars.into_iter()) {
-        let point_aff = point.borrow().into_affine();
+        let point_aff = point.into_affine();
         let psi_point = EdwardsParameters::endomorphism(&point_aff);
-        let (s1, s2) = EdwardsParameters::scalar_decomposition(scalar.borrow());
+        let (s1, s2) = EdwardsParameters::scalar_decomposition(scalar);
 
         let partial_res = multi_scalar_mul(&point_aff, &s1, &psi_point, &s2);
         res += partial_res;
