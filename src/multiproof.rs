@@ -29,20 +29,16 @@ pub struct CRS {
 
 impl CRS {
     pub fn new(n: usize) -> CRS {
-        let G: Vec<EdwardsProjective> = (0..n)
-            .map(|i| {
-                EdwardsProjective::prime_subgroup_generator().mul(Fr::from(i as u128).into_repr())
-            })
-            .collect();
-        let H: Vec<EdwardsProjective> = (0..n)
-            .map(|i| {
-                EdwardsProjective::prime_subgroup_generator()
-                    .mul(Fr::from((i + n) as u128).into_repr())
-            })
-            .collect();
+        use ark_std::rand::SeedableRng;
+        use ark_std::UniformRand;
+        use rand_chacha::ChaCha20Rng;
 
-        let Q = EdwardsProjective::prime_subgroup_generator()
-            .mul(Fr::from((2 * n) as u128).into_repr());
+        let mut rng = ChaCha20Rng::from_seed([0u8; 32]);
+
+        let G: Vec<EdwardsProjective> = (0..n).map(|_| EdwardsProjective::rand(&mut rng)).collect();
+        let H: Vec<EdwardsProjective> = (0..n).map(|_| EdwardsProjective::rand(&mut rng)).collect();
+
+        let Q = EdwardsProjective::rand(&mut rng);
 
         CRS { n, G, H, Q }
     }
