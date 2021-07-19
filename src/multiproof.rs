@@ -366,3 +366,56 @@ fn open_multiproof_lagrange() {
         n
     ));
 }
+
+#[test]
+fn open_multiproof_lagrange_2_polys() {
+    let poly = LagrangeBasis::new(vec![
+        Fr::one(),
+        Fr::from(10u128),
+        Fr::from(200u128),
+        Fr::from(78u128),
+    ]);
+    let n = poly.values().len();
+
+    let x_i = 1;
+    let y_i = poly.evaluate_in_domain(x_i);
+    let x_j = 2;
+    let y_j = poly.evaluate_in_domain(x_j);
+
+    let crs = CRS::new(n);
+    let poly_comm = crs.commit_lagrange_poly(&poly);
+
+    let prover_query_i = ProverQueryLagrange {
+        comm: poly_comm,
+        poly: poly.clone(),
+        x_i: x_i,
+        y_i: y_i,
+    };
+    let prover_query_j = ProverQueryLagrange {
+        comm: poly_comm,
+        poly: poly,
+        x_i: x_j,
+        y_i: y_j,
+    };
+
+    let precomp = PrecomputedWeights::new(n);
+
+    let mut transcript = Transcript::new(b"foo");
+    let multiproof = MultiOpen::open_multiple_lagrange(
+        &crs,
+        &precomp,
+        &mut transcript,
+        vec![prover_query_i.clone(), prover_query_j.clone()],
+    );
+
+    let mut transcript = Transcript::new(b"foo");
+    let verifier_query_i: VerifierQuery = prover_query_i.into();
+    let verifier_query_j: VerifierQuery = prover_query_j.into();
+    assert!(multiproof.check_single_lagrange(
+        &crs,
+        &precomp,
+        &[verifier_query_i, verifier_query_j],
+        &mut transcript,
+        n
+    ));
+}
