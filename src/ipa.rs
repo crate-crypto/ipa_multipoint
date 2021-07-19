@@ -178,7 +178,7 @@ impl NoZK {
         let Rs = self.R_vec.clone();
         assert_eq!(n, 1 << Ls.len());
 
-        let mut n = 1 << Ls.len();
+        let n = 1 << Ls.len();
 
         // challenge data
         transcript.append_u64(b"n", n as u64);
@@ -327,6 +327,7 @@ mod tests {
 
         // We add the compressed point to the transcript, because we need some non-trivial input to generate alpha
         // If this is not done, then the prover always will be able to predict what the first challenge will be
+        // also because `P` is in the statement, we are proving over.
         prover_transcript.append_point(b"P", &P);
 
         let proof = create(&mut prover_transcript, G.clone(), H.clone(), &Q, a, b);
