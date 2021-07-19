@@ -314,35 +314,6 @@ impl MultiOpen {
 
         OpeningProof { P, t, ipa: no_zk }
     }
-    // We assume that you only want to open points on the domain
-    // with this method
-    pub fn open_single_lagrange(
-        crs: &CRS,
-        transcript: &mut Transcript,
-        polynomial: LagrangeBasis,
-        point: usize,
-    ) -> OpeningProof {
-        let t = polynomial.evaluate_in_domain(point);
-        let a = polynomial.values().to_vec();
-        let mut b = vec![Fr::zero(); crs.n];
-        b[point] = Fr::one();
-
-        let P = slow_vartime_multiscalar_mul(
-            a.iter().chain(b.iter()).chain(std::iter::once(&t)),
-            crs.G
-                .iter()
-                .chain(crs.H.iter())
-                .chain(std::iter::once(&crs.Q)),
-        );
-
-        // // We add the compressed point to the transcript, because we need some non-trivial input to generate alpha
-        // // If this is not done, then the prover always will be able to predict what the first challenge will be
-        transcript.append_point(b"P", &P);
-
-        let no_zk = ipa::create(transcript, crs.G.clone(), crs.H.clone(), &crs.Q, a, b);
-
-        OpeningProof { P, t, ipa: no_zk }
-    }
 }
 
 fn powers_of(point: Fr, n: usize) -> Vec<Fr> {
@@ -354,27 +325,6 @@ fn powers_of(point: Fr, n: usize) -> Vec<Fr> {
     }
     powers
 }
-
-// #[test]
-// fn open_single_lagrange_proof() {
-//     let poly = LagrangeBasis::new(vec![
-//         Fr::from(200),
-//         Fr::one(),
-//         Fr::from(25u128),
-//         Fr::from(28u128),
-//     ]);
-
-//     let point = 1;
-//     let n = poly.values().len();
-
-//     let crs = CRS::new(n);
-
-//     let mut transcript = Transcript::new(b"foo");
-//     let mut proof = MultiOpen::open_single_lagrange(&crs, &mut transcript, poly, point);
-
-//     let mut transcript = Transcript::new(b"foo");
-//     assert!(proof.check_single(&crs, &mut transcript, n))
-// }
 
 #[test]
 fn open_multiproof_lagrange() {
