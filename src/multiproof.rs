@@ -20,7 +20,7 @@ use bandersnatch::EdwardsProjective;
 use bandersnatch::Fr;
 use merlin::Transcript;
 use sha3::Sha3_512;
-struct CRS {
+pub struct CRS {
     n: usize,
     G: Vec<EdwardsProjective>,
     H: Vec<EdwardsProjective>,
@@ -68,15 +68,15 @@ impl CRS {
     }
 }
 
-struct MultiOpen;
+pub struct MultiOpen;
 
 #[derive(Clone, Debug)]
-struct ProverQueryLagrange {
-    comm: EdwardsProjective,
-    poly: LagrangeBasis,
+pub struct ProverQueryLagrange {
+    pub comm: EdwardsProjective,
+    pub poly: LagrangeBasis,
     // x_i is z_i in the hackmd. Maybe change the hackmd as f(x_i) = y_i is more intuitive
-    x_i: usize,
-    y_i: Fr,
+    pub x_i: usize,
+    pub y_i: Fr,
 }
 
 impl From<ProverQueryLagrange> for VerifierQuery {
@@ -88,7 +88,7 @@ impl From<ProverQueryLagrange> for VerifierQuery {
         }
     }
 }
-struct VerifierQuery {
+pub struct VerifierQuery {
     comm: EdwardsProjective,
     // x_i is z_i in the hackmd. Maybe change the hackmd as f(x_i) = y_i is more intuitive
     x_i: Fr,
@@ -178,7 +178,7 @@ impl MultiOpen {
 
         // 3. Compute the IPAs
 
-        dbg!(g_x.evaluate_outside_domain(precomp, t));
+        g_x.evaluate_outside_domain(precomp, t);
 
         let q = transcript.challenge_scalar(b"q");
 
@@ -194,7 +194,7 @@ impl MultiOpen {
     }
 }
 
-struct MultiOpenProof {
+pub struct MultiOpenProof {
     open_proof: OpeningProof,
 
     g_1_eval: Fr,
@@ -204,10 +204,10 @@ struct MultiOpenProof {
 
 impl MultiOpenProof {
     pub fn check_single_lagrange(
-        self,
+        &self,
         crs: &CRS,
         precomp: &PrecomputedWeights,
-        queries: Vec<VerifierQuery>,
+        queries: &[VerifierQuery],
         transcript: &mut Transcript,
         n: usize,
     ) -> bool {
@@ -274,7 +274,7 @@ impl MultiOpenProof {
     }
 }
 
-struct OpeningProof {
+pub struct OpeningProof {
     // This is the commitment to the statement
     P: EdwardsProjective,
 
@@ -284,7 +284,7 @@ struct OpeningProof {
 }
 
 impl OpeningProof {
-    pub fn check_single(self, crs: &CRS, transcript: &mut Transcript, n: usize) -> bool {
+    pub fn check_single(&self, crs: &CRS, transcript: &mut Transcript, n: usize) -> bool {
         transcript.append_point(b"P", &self.P);
 
         self.ipa
@@ -361,7 +361,7 @@ fn open_multiproof_lagrange() {
     assert!(multiproof.check_single_lagrange(
         &crs,
         &precomp,
-        vec![verifier_query],
+        &[verifier_query],
         &mut transcript,
         n
     ));

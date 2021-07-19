@@ -3,7 +3,6 @@ use ark_poly::{domain, univariate::DensePolynomial, Polynomial, UVPolynomial};
 use bandersnatch::Fr;
 use std::{
     convert::TryFrom,
-    net::ToSocketAddrs,
     ops::{Add, Mul, Sub},
 };
 
