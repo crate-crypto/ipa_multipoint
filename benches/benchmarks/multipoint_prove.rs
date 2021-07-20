@@ -27,17 +27,18 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let crs = CRS::new(n);
 
     let mut rng = test_rng();
-    let poly = LagrangeBasis::new((0..n).map(|_| Fr::rand(&mut rng)).collect());
-    let poly_comm = crs.commit_lagrange_poly(&poly);
 
     for num_polynomials in [10_000, 20_000] {
-        let mut polys: Vec<LagrangeBasis> = Vec::with_capacity(num_polynomials);
+        let mut polys: Vec<(LagrangeBasis, EdwardsProjective)> =
+            Vec::with_capacity(num_polynomials);
         for _ in 0..num_polynomials {
-            polys.push(poly.clone())
+            let poly = LagrangeBasis::new((0..n).map(|_| Fr::rand(&mut rng)).collect());
+            let poly_comm = crs.commit_lagrange_poly(&poly);
+            polys.push((poly.clone(), poly_comm))
         }
 
         let mut prover_queries = Vec::with_capacity(num_polynomials);
-        for (i, poly) in polys.into_iter().enumerate() {
+        for (i, (poly, poly_comm)) in polys.into_iter().enumerate() {
             let point = i % n;
 
             let y_i = poly.evaluate_in_domain(point);
