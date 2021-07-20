@@ -169,12 +169,15 @@ impl LagrangeBasis {
     }
 
     // XXX: Maybe rename this to `divide on domain` or `divide on linear domain`
+    // computes f(x) - f(x_i) / x - x_i where x_i is an element in the domain
     pub(crate) fn divide_by_linear_vanishing(
         &self,
         precomp: &PrecomputedWeights,
         index: usize,
     ) -> LagrangeBasis {
         let mut q = vec![Fr::zero(); self.domain];
+
+        let y = self.values[index];
 
         for i in 0..self.domain {
             if i != index {
@@ -183,7 +186,7 @@ impl LagrangeBasis {
                 let den = den.abs();
                 let den_inv = precomp.get_inverted_element(den as usize, is_negative);
 
-                let q_i = self.values[i] * den_inv;
+                let q_i = (self.values[i] - y) * den_inv;
                 q[i] = q_i;
 
                 let weight_ratio = precomp.get_ratio_of_barycentric_weights(index, i);
