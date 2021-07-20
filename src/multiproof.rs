@@ -122,7 +122,7 @@ impl MultiOpen {
         }
         // XXX: note that since we are always opening on the domain
         // the prover does not need to pass y_i explicitly
-        // It's just an index operation
+        // It's just an index operation on the lagrange basis
         for query in queries.iter() {
             transcript.append_scalar(b"y_i", &query.y_i)
         }
@@ -174,9 +174,10 @@ impl MultiOpen {
         let t = transcript.challenge_scalar(b"t");
         //
         //
-        let mut g1_den: Vec<_> = queries
+
+        let mut g1_den: Vec<_> = aggregated_queries
             .iter()
-            .map(|query| t - Fr::from(query.x_i as u128))
+            .map(|(x_i, _)| t - Fr::from(*x_i as u128))
             .collect();
         batch_inversion(&mut g1_den);
 
