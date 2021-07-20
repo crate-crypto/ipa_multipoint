@@ -122,7 +122,7 @@ impl MultiOpen {
         }
         // XXX: note that since we are always opening on the domain
         // the prover does not need to pass y_i explicitly
-        // It's just an index operation
+        // It's just an index operation on the lagrange basis
         for query in queries.iter() {
             transcript.append_scalar(b"y_i", &query.y_i)
         }
