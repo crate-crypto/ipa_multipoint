@@ -180,14 +180,17 @@ impl MultiOpen {
             .collect();
         batch_inversion(&mut g1_den);
 
-        let g1_x = aggregated_queries
+        let g1_x = powers_of_r
             .into_iter()
+            .zip(queries.iter())
             .zip(g1_den.into_iter())
-            .map(|((_, agg_f_x), den_inv)| {
-                let term: Vec<_> = agg_f_x
+            .map(|((r_i, query), den_inv)| {
+                let f_x = &query.poly;
+
+                let term: Vec<_> = f_x
                     .values()
                     .iter()
-                    .map(|coeff| den_inv * coeff)
+                    .map(|coeff| r_i * coeff * den_inv)
                     .collect();
 
                 LagrangeBasis::new(term)
