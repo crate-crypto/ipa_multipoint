@@ -27,12 +27,15 @@ A polynomial commitment scheme for opening multiple polynomials at different poi
 
 Machine : 2.4 GHz 8-Core Intel Core i9
 
-- To verify the opening of a polynomial of degree 255 (256 points in lagrange basis): `23.048ms`
+- To verify the opening of a polynomial of degree 255 (256 points in lagrange basis): `11.92ms`
 
-- To verify a multi-opening proof of 10,000 polynomials: `390.67ms`
+- To verify a multi-opening proof of 10,000 polynomials: `232.12ms`
 
-- To verify a multi-opening proof of 20,000 polynomials: `604.15ms`
+- To verify a multi-opening proof of 20,000 polynomials: `405.87ms`
+
+- To prove a multi-opening proof of 10,000 polynomials: `266.49ms`
+
+- To prove a multi-opening proof of 20,000 polynomials: `422.94ms`
+
 
 These benchmarks are tentative because on one hand, the machine being used may not be the what the average user uses, while on the other hand, we have not optimised the verifier algorithm to remove `bH` and the pippenger algorithm does not take into consideration GLV. 
-
-Prover algorithm has not been refactored yet, so benchmarks are coming soon (TM)
