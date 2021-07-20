@@ -174,23 +174,21 @@ impl MultiOpen {
         let t = transcript.challenge_scalar(b"t");
         //
         //
-        let mut g1_den: Vec<_> = queries
+
+        let mut g1_den: Vec<_> = aggregated_queries
             .iter()
-            .map(|query| t - Fr::from(query.x_i as u128))
+            .map(|(x_i, _)| t - Fr::from(*x_i as u128))
             .collect();
         batch_inversion(&mut g1_den);
 
-        let g1_x = powers_of_r
+        let g1_x = aggregated_queries
             .into_iter()
-            .zip(queries.iter())
             .zip(g1_den.into_iter())
-            .map(|((r_i, query), den_inv)| {
-                let f_x = &query.poly;
-
-                let term: Vec<_> = f_x
+            .map(|((_, agg_f_x), den_inv)| {
+                let term: Vec<_> = agg_f_x
                     .values()
                     .iter()
-                    .map(|coeff| r_i * coeff * den_inv)
+                    .map(|coeff| den_inv * coeff)
                     .collect();
 
                 LagrangeBasis::new(term)
