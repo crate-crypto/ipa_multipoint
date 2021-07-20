@@ -16,6 +16,7 @@ ark-std = { version = "^0.3.0", default-features = false }
 ark-serialize = { version = "^0.3.0", default-features = false }
 ark-poly = { version = "^0.3.0", default-features = false }
 rand_chacha = { version = "0.3.0", default-features = false }
+itertools = "0.10.1"
 [[bench]]
 name = "benchmark_main"
 harness = false
