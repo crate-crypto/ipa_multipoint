@@ -1,6 +1,8 @@
 // We get given multiple polynomials evaluated at different points
 #![allow(non_snake_case)]
 
+use std::collections::HashMap;
+
 use crate::ipa::{self, NoZK};
 use crate::lagrange_basis::{LagrangeBasis, PrecomputedWeights};
 use crate::math_utils::inner_product;
@@ -90,6 +92,18 @@ pub struct VerifierQuery {
     y_i: Fr,
 }
 
+fn group_prover_queries<'a>(
+    prover_queries: &'a [ProverQueryLagrange],
+    challenges: &'a [Fr],
+) -> HashMap<usize, Vec<(&'a ProverQueryLagrange, &'a Fr)>> {
+    // We want to group all of the polynomials which are evaluated at the same point together
+    use itertools::Itertools;
+    prover_queries
+        .iter()
+        .zip(challenges.iter())
+        .into_group_map_by(|x| x.0.x_i)
+}
+
 impl MultiOpen {
     pub fn open_multiple_lagrange(
         crs: &CRS,
@@ -106,24 +120,46 @@ impl MultiOpen {
         for query in queries.iter() {
             transcript.append_scalar(b"x_i", &Fr::from(query.x_i as u128))
         }
+        // XXX: note that since we are always opening on the domain
+        // the prover does not need to pass y_i explicitly
+        // It's just an index operation
         for query in queries.iter() {
             transcript.append_scalar(b"y_i", &query.y_i)
         }
         let r = transcript.challenge_scalar(b"r");
         let powers_of_r = powers_of(r, queries.len());
 
-        // Compute g(X)
-        let g_x: LagrangeBasis = powers_of_r
-            .iter()
-            .zip(queries.iter())
-            .map(|(r_i, query)| {
-                let f_x = &query.poly;
+        let grouped_queries = group_prover_queries(&queries, &powers_of_r);
 
-                let y = &query.y_i;
-                let x = &query.x_i;
+        // aggregate all of the queries evaluated at the same point
+        let aggregated_queries: Vec<_> = grouped_queries
+            .into_iter()
+            .map(|(point, queries_challenges)| {
+                let mut aggregated_polynomial = vec![Fr::zero(); crs.n];
 
-                (f_x - y).divide_by_linear_vanishing(precomp, *x) * *r_i
+                let scaled_lagrange_polynomials =
+                    queries_challenges.into_iter().map(|(query, challenge)| {
+                        // scale the polynomial by the challenge
+                        query.poly.values().iter().map(move |x| *x * challenge)
+                    });
+
+                for poly_mul_challenge in scaled_lagrange_polynomials {
+                    for (result, scaled_poly) in
+                        aggregated_polynomial.iter_mut().zip(poly_mul_challenge)
+                    {
+                        *result += scaled_poly;
+                    }
+                }
+
+                (point, LagrangeBasis::new(aggregated_polynomial))
             })
+            .collect();
+
+        // Compute g(X)
+
+        let g_x: LagrangeBasis = aggregated_queries
+            .iter()
+            .map(|(point, agg_f_x)| (agg_f_x).divide_by_linear_vanishing(precomp, *point))
             .fold(LagrangeBasis::zero(), |mut res, val| {
                 res = res + val;
                 res
@@ -144,17 +180,14 @@ impl MultiOpen {
             .collect();
         batch_inversion(&mut g1_den);
 
-        let g1_x = powers_of_r
+        let g1_x = aggregated_queries
             .into_iter()
-            .zip(queries.iter())
             .zip(g1_den.into_iter())
-            .map(|((r_i, query), den_inv)| {
-                let f_x = &query.poly;
-
-                let term: Vec<_> = f_x
+            .map(|((_, agg_f_x), den_inv)| {
+                let term: Vec<_> = agg_f_x
                     .values()
                     .iter()
-                    .map(|coeff| r_i * coeff * den_inv)
+                    .map(|coeff| den_inv * coeff)
                     .collect();
 
                 LagrangeBasis::new(term)
