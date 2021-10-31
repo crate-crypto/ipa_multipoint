@@ -5,7 +5,7 @@ pub fn inner_product(a: &[Fr], b: &[Fr]) -> Fr {
     a.iter().zip(b.iter()).map(|(a, b)| *a * *b).sum()
 }
 
-pub(crate) fn powers_of(point: Fr, n: usize) -> Vec<Fr> {
+pub fn powers_of(point: Fr, n: usize) -> Vec<Fr> {
     let mut powers = Vec::with_capacity(n);
     powers.push(Fr::one());
 
