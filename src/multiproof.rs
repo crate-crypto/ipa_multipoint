@@ -17,7 +17,6 @@ use ark_poly::univariate::DensePolynomial;
 use ark_poly::{Polynomial, UVPolynomial};
 use bandersnatch::multi_scalar_mul;
 use bandersnatch::EdwardsAffine;
-use bandersnatch::EdwardsParameters;
 use bandersnatch::EdwardsProjective;
 use bandersnatch::Fr;
 use merlin::Transcript;

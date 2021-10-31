@@ -9,7 +9,6 @@ use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
 use bandersnatch::multi_scalar_mul;
 use bandersnatch::EdwardsAffine;
-use bandersnatch::EdwardsParameters;
 use bandersnatch::EdwardsProjective;
 use bandersnatch::Fr;
 use bandersnatch::GLVParameters;
