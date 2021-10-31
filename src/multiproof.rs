@@ -23,7 +23,6 @@ use merlin::Transcript;
 pub struct CRS {
     n: usize,
     G: Vec<EdwardsProjective>,
-    H: Vec<EdwardsProjective>,
     Q: EdwardsProjective,
 }
 
@@ -36,31 +35,14 @@ impl CRS {
         let mut rng = ChaCha20Rng::from_seed([0u8; 32]);
 
         let G: Vec<EdwardsProjective> = (0..n).map(|_| EdwardsProjective::rand(&mut rng)).collect();
-        let H: Vec<EdwardsProjective> = (0..n).map(|_| EdwardsProjective::rand(&mut rng)).collect();
 
         let Q = EdwardsProjective::rand(&mut rng);
 
-        CRS { n, G, H, Q }
+        CRS { n, G, Q }
     }
 
-    pub fn commit_poly(&self, polynomial: &DensePolynomial<Fr>) -> EdwardsProjective {
-        slow_vartime_multiscalar_mul(polynomial.coeffs.iter(), self.G.iter())
-    }
     pub fn commit_lagrange_poly(&self, polynomial: &LagrangeBasis) -> EdwardsProjective {
         slow_vartime_multiscalar_mul(polynomial.values().iter(), self.G.iter())
-    }
-
-    // Convert C = <a, G> into C' = <a, G> + <b, H> + <a, b>Q
-    pub fn augment_commitment(
-        &self,
-        comm: EdwardsProjective,
-        b: Vec<Fr>,
-        inner_prod: Fr,
-    ) -> EdwardsProjective {
-        slow_vartime_multiscalar_mul(
-            b.iter().chain(std::iter::once(&inner_prod)),
-            self.H.iter().chain(std::iter::once(&self.Q)),
-        ) + comm
     }
 }
 
