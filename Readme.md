@@ -14,16 +14,12 @@ A polynomial commitment scheme for opening multiple polynomials at different poi
 
 - Parallelism is not being used
 - We have not modified pippenger to take benefit of the GLV endomorphism
-- The IPA argument assumes that `b` in P = <a, G> + <b,H> + <a,b>Q needs to be commited to. We can change it to P = <a, G> + <a,b>Q and `b` can be computed by the verifier.
 
 ## API
 
-- The OpeningProof should not carry `P` as the verifier re-computes it.
 - We should wrap the IPA proof in a poly commit struct, so that users cannot mix up the `a_vec` and `b_vec`, we will not commit to `b_vec` as a poly-commit
 
 ## Tentative benchmarks
-
-
 
 Machine : 2.4 GHz 8-Core Intel Core i9
 
