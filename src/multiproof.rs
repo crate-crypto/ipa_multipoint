@@ -203,29 +203,25 @@ impl MultiOpen {
         let g1_comm = crs.commit_lagrange_poly(&g1_x);
         transcript.append_point(b"g1_x", &g1_comm);
 
-        // 3. Compute the IPAs
+        //3. Compute g_1(X) - g(X)
+        // This is the polynomial, we will create an opening for
+        let g_3_x = &g1_x - &g_x;
+        let g_3_x_comm = g1_comm - g_x_comm;
 
-        g_x.evaluate_outside_domain(precomp, t);
+        // 4. Compute the IPAs
 
-        let q = transcript.challenge_scalar(b"q");
-
-        let g_3_x = g1_x + (g_x * q);
-
-        let g_3_ipa =
-            MultiOpen::open_single_lagrange_out_of_domain(crs, precomp, transcript, g_3_x, t);
+        let g_3_ipa = MultiOpen::open_single_lagrange_out_of_domain(
+            crs, precomp, transcript, g_3_x, g_3_x_comm, t,
+        );
         MultiOpenProof {
             open_proof: g_3_ipa,
-            g_1_eval: g1_t,
             g_x_comm: g_x_comm,
         }
     }
 }
 
 pub struct MultiOpenProof {
-    open_proof: OpeningProof,
-
-    g_1_eval: Fr,
-
+    open_proof: NoZK,
     g_x_comm: EdwardsProjective,
 }
 
@@ -274,76 +270,37 @@ impl MultiOpenProof {
             .map(|(r_i_den_inv, query)| *r_i_den_inv * query.y_i)
             .sum();
 
-        //4. Compute g(t)
-        let g_t = self.g_1_eval - g2_t;
-
-        //5. Compute [g_1(X)]
+        //4. Compute [g_1(X)] = E
         let comms: Vec<_> = queries.into_iter().map(|query| query.comm).collect();
         let g1_comm = slow_vartime_multiscalar_mul(helper_scalars.iter(), comms.iter());
 
         transcript.append_point(b"g1_x", &g1_comm);
 
-        let q = transcript.challenge_scalar(b"q");
+        // E - D
+        let g3_comm = g1_comm - self.g_x_comm;
 
-        let g3_t = self.g_1_eval + q * g_t;
-        let g3_comm = g1_comm + self.g_x_comm.mul(q.into_repr());
+        // Check IPA
+        let b = LagrangeBasis::evaluate_lagrange_coefficients(&precomp, crs.n, t);
 
-        // augment g3_comm
-        let powers = LagrangeBasis::evaluate_lagrange_coefficients(&precomp, crs.n, t);
-        let g3_augmented = crs.augment_commitment(g3_comm, powers, g3_t);
-
-        assert_eq!(g3_augmented, self.open_proof.P);
-
-        self.open_proof.check_single(crs, transcript, n)
+        self.open_proof
+            .verify(transcript, &crs.G, &crs.Q, crs.n, b, g3_comm, t, g2_t)
     }
 }
 
-pub struct OpeningProof {
-    // This is the commitment to the statement
-    P: EdwardsProjective,
-
-    t: Fr,
-
-    ipa: NoZK,
-}
-
-impl OpeningProof {
-    pub fn check_single(&self, crs: &CRS, transcript: &mut Transcript, n: usize) -> bool {
-        transcript.append_point(b"P", &self.P);
-
-        self.ipa
-            .verify(transcript, &crs.G, &crs.H, &crs.Q, n, self.P, self.t)
-    }
-}
-
+// TODO: we could probably get rid of this method altogether and just do this in the multiproof
+// TODO method
 impl MultiOpen {
     pub fn open_single_lagrange_out_of_domain(
         crs: &CRS,
         precomp: &PrecomputedWeights,
         transcript: &mut Transcript,
         polynomial: LagrangeBasis,
+        commitment: EdwardsProjective,
         x_i: Fr,
-    ) -> OpeningProof {
+    ) -> NoZK {
         let a = polynomial.values().to_vec();
         let b = LagrangeBasis::evaluate_lagrange_coefficients(precomp, crs.n, x_i);
-
-        let t = b.iter().zip(a.iter()).map(|(l_i, f_i)| *f_i * l_i).sum();
-
-        let P = slow_vartime_multiscalar_mul(
-            a.iter().chain(b.iter()).chain(std::iter::once(&t)),
-            crs.G
-                .iter()
-                .chain(crs.H.iter())
-                .chain(std::iter::once(&crs.Q)),
-        );
-
-        // // We add the compressed point to the transcript, because we need some non-trivial input to generate alpha
-        // // If this is not done, then the prover always will be able to predict what the first challenge will be
-        transcript.append_point(b"P", &P);
-
-        let no_zk = ipa::create(transcript, crs.G.clone(), crs.H.clone(), &crs.Q, a, b);
-
-        OpeningProof { P, t, ipa: no_zk }
+        crate::ipa::create(transcript, crs.G.clone(), &crs.Q, a, commitment, b, x_i)
     }
 }
 
