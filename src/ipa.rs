@@ -364,12 +364,6 @@ fn generate_challenges(proof: &NoZK, transcript: &mut Transcript) -> Vec<Fr> {
     challenges
 }
 
-use ark_serialize::CanonicalSerialize;
-fn dbg_print<T: CanonicalSerialize>(s: T, label: &str) {
-    let mut bytes = [0u8; 32];
-    s.serialize(&mut bytes[..]).unwrap();
-    println!("{} :{}", label, hex::encode(&bytes))
-}
 #[cfg(test)]
 mod tests {
     use super::*;
