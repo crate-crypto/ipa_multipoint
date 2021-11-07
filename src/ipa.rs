@@ -18,7 +18,7 @@ use std::borrow::Borrow;
 use std::iter;
 
 #[derive(Clone)]
-pub struct NoZK {
+pub struct IPAProof {
     pub(crate) L_vec: Vec<EdwardsProjective>,
     pub(crate) R_vec: Vec<EdwardsProjective>,
     pub(crate) a: Fr,
@@ -32,7 +32,7 @@ pub fn create(
     mut b_vec: Vec<Fr>,
     // This is the z in f(z)
     input_point: Fr,
-) -> NoZK {
+) -> IPAProof {
     transcript.domain_sep(b"ipa");
 
     let mut a = &mut a_vec[..];
@@ -99,7 +99,7 @@ pub fn create(
         G = G_L;
     }
 
-    NoZK {
+    IPAProof {
         L_vec,
         R_vec,
         a: a[0],
@@ -115,7 +115,7 @@ fn log2(n: usize) -> u32 {
     n.next_power_of_two().trailing_zeros()
 }
 
-impl NoZK {
+impl IPAProof {
     pub fn verify(
         &self,
         transcript: &mut Transcript,
@@ -346,7 +346,7 @@ pub fn slow_vartime_multiscalar_mul<'a>(
     VariableBaseMSM::multi_scalar_mul(&points, &scalars)
 }
 
-fn generate_challenges(proof: &NoZK, transcript: &mut Transcript) -> Vec<Fr> {
+fn generate_challenges(proof: &IPAProof, transcript: &mut Transcript) -> Vec<Fr> {
     let mut challenges: Vec<Fr> = Vec::with_capacity(proof.L_vec.len());
 
     for (L, R) in proof.L_vec.iter().zip(proof.R_vec.iter()) {
@@ -371,7 +371,7 @@ mod tests {
     use rand_chacha::ChaCha20Rng;
     use std::iter;
     #[test]
-    fn test_create_nozk_proof() {
+    fn test_create_IPAProof_proof() {
         let n = 8;
         let crs = CRS::new(n);
 

@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use crate::ipa::{self, NoZK};
+use crate::ipa::{self, IPAProof};
 use crate::lagrange_basis::{LagrangeBasis, PrecomputedWeights};
 use crate::math_utils::inner_product;
 use crate::math_utils::powers_of;
@@ -196,8 +196,6 @@ impl MultiPoint {
                 res
             });
 
-        let g1_t = g1_x.evaluate_outside_domain(precomp, t);
-
         let g1_comm = crs.commit_lagrange_poly(&g1_x);
         transcript.append_point(b"E", &g1_comm);
 
@@ -217,7 +215,7 @@ impl MultiPoint {
 }
 
 pub struct MultiPointProof {
-    open_proof: NoZK,
+    open_proof: IPAProof,
     g_x_comm: EdwardsProjective,
 }
 
@@ -289,7 +287,7 @@ pub(crate) fn open_point_outside_of_domain(
     polynomial: LagrangeBasis,
     commitment: EdwardsProjective,
     z_i: Fr,
-) -> NoZK {
+) -> IPAProof {
     let a = polynomial.values().to_vec();
     let b = LagrangeBasis::evaluate_lagrange_coefficients(precomp, crs.n, z_i);
     crate::ipa::create(transcript, crs, a, commitment, b, z_i)
