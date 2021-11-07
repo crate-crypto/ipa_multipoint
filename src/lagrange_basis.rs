@@ -101,7 +101,7 @@ impl PrecomputedWeights {
 
         PrecomputedWeights {
             barycentric_weights,
-            inverted_domain: inverted_domain,
+            inverted_domain,
         }
     }
 
