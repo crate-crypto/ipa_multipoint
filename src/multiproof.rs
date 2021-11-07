@@ -70,8 +70,8 @@ pub struct MultiOpen;
 pub struct ProverQueryLagrange {
     pub comm: EdwardsProjective,
     pub poly: LagrangeBasis,
-    // x_i is z_i in the hackmd. Maybe change the hackmd as f(x_i) = y_i is more intuitive
-    pub x_i: usize,
+    // Given a function f, we use z_i to denote the input point and y_i to denote the output, ie f(z_i) = y_i
+    pub z_i: usize,
     pub y_i: Fr,
 }
 
@@ -79,15 +79,15 @@ impl From<ProverQueryLagrange> for VerifierQuery {
     fn from(pq: ProverQueryLagrange) -> Self {
         VerifierQuery {
             comm: pq.comm,
-            x_i: Fr::from(pq.x_i as u128),
+            z_i: Fr::from(pq.z_i as u128),
             y_i: pq.y_i,
         }
     }
 }
 pub struct VerifierQuery {
     comm: EdwardsProjective,
-    // x_i is z_i in the hackmd. Maybe change the hackmd as f(x_i) = y_i is more intuitive
-    x_i: Fr,
+    // z_i is z_i in the hackmd. Maybe change the hackmd as f(z_i) = y_i is more intuitive
+    z_i: Fr,
     y_i: Fr,
 }
 
@@ -101,7 +101,7 @@ fn group_prover_queries<'a>(
     prover_queries
         .iter()
         .zip(challenges.iter())
-        .into_group_map_by(|x| x.0.x_i)
+        .into_group_map_by(|x| x.0.z_i)
 }
 
 impl MultiOpen {
@@ -117,8 +117,7 @@ impl MultiOpen {
         // Add points and evaluations
         for query in queries.iter() {
             transcript.append_point(b"C", &query.comm);
-            // TODO in the other implementations, we use z_i, either change this to use z_i or change everywhere else to use x_i
-            transcript.append_scalar(b"z", &Fr::from(query.x_i as u128));
+            transcript.append_scalar(b"z", &Fr::from(query.z_i as u128));
             // XXX: note that since we are always opening on the domain
             // the prover does not need to pass y_i explicitly
             // It's just an index operation on the lagrange basis
@@ -176,7 +175,7 @@ impl MultiOpen {
 
         let mut g1_den: Vec<_> = aggregated_queries
             .iter()
-            .map(|(x_i, _)| t - Fr::from(*x_i as u128))
+            .map(|(z_i, _)| t - Fr::from(*z_i as u128))
             .collect();
         batch_inversion(&mut g1_den);
 
@@ -236,7 +235,7 @@ impl MultiOpenProof {
         // Add points and evaluations
         for query in queries.iter() {
             transcript.append_point(b"C", &query.comm);
-            transcript.append_scalar(b"z", &query.x_i);
+            transcript.append_scalar(b"z", &query.z_i);
             transcript.append_scalar(b"y", &query.y_i);
         }
 
@@ -249,7 +248,7 @@ impl MultiOpenProof {
 
         // 3. Compute g_2(t)
         //
-        let mut g2_den: Vec<_> = queries.iter().map(|query| t - query.x_i).collect();
+        let mut g2_den: Vec<_> = queries.iter().map(|query| t - query.z_i).collect();
         batch_inversion(&mut g2_den);
 
         let helper_scalars: Vec<_> = powers_of_r
@@ -289,11 +288,11 @@ pub(crate) fn open_point_outside_of_domain(
     transcript: &mut Transcript,
     polynomial: LagrangeBasis,
     commitment: EdwardsProjective,
-    x_i: Fr,
+    z_i: Fr,
 ) -> NoZK {
     let a = polynomial.values().to_vec();
-    let b = LagrangeBasis::evaluate_lagrange_coefficients(precomp, crs.n, x_i);
-    crate::ipa::create(transcript, crs.clone(), a, commitment, b, x_i)
+    let b = LagrangeBasis::evaluate_lagrange_coefficients(precomp, crs.n, z_i);
+    crate::ipa::create(transcript, crs.clone(), a, commitment, b, z_i)
 }
 
 #[test]
@@ -315,7 +314,7 @@ fn open_multiproof_lagrange() {
     let prover_query = ProverQueryLagrange {
         comm: poly_comm,
         poly: poly,
-        x_i: point,
+        z_i: point,
         y_i,
     };
 
@@ -344,8 +343,8 @@ fn open_multiproof_lagrange_2_polys() {
     ]);
     let n = poly.values().len();
 
-    let x_i = 1;
-    let y_i = poly.evaluate_in_domain(x_i);
+    let z_i = 1;
+    let y_i = poly.evaluate_in_domain(z_i);
     let x_j = 2;
     let y_j = poly.evaluate_in_domain(x_j);
 
@@ -355,13 +354,13 @@ fn open_multiproof_lagrange_2_polys() {
     let prover_query_i = ProverQueryLagrange {
         comm: poly_comm,
         poly: poly.clone(),
-        x_i: x_i,
+        z_i: z_i,
         y_i: y_i,
     };
     let prover_query_j = ProverQueryLagrange {
         comm: poly_comm,
         poly: poly,
-        x_i: x_j,
+        z_i: x_j,
         y_i: y_j,
     };
 
@@ -460,13 +459,13 @@ fn multiproof_consistency() {
     let prover_query_a = ProverQueryLagrange {
         comm: poly_comm_a,
         poly: polynomial_a,
-        x_i: point_a,
+        z_i: point_a,
         y_i: y_a,
     };
     let prover_query_b = ProverQueryLagrange {
         comm: poly_comm_b,
         poly: polynomial_b,
-        x_i: point_b,
+        z_i: point_b,
         y_i: y_b,
     };
 
