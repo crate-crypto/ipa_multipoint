@@ -28,8 +28,8 @@ pub struct CRS {
 }
 
 impl CRS {
-    pub fn new(n: usize) -> CRS {
-        let G: Vec<_> = generate_random_elements(n)
+    pub fn new(n: usize, seed: &'static [u8]) -> CRS {
+        let G: Vec<_> = generate_random_elements(n, seed)
             .into_iter()
             .map(|affine_point| affine_point.into_projective())
             .collect();
@@ -42,14 +42,13 @@ impl CRS {
     }
 }
 
-fn generate_random_elements(num_required_points: usize) -> Vec<EdwardsAffine> {
+fn generate_random_elements(num_required_points: usize, seed: &'static [u8]) -> Vec<EdwardsAffine> {
     use bandersnatch::Fq;
     use sha2::{Digest, Sha256};
 
     let mut hasher = Sha256::new();
 
-    // TODO: make this seed a parameter and pass it from the verkle trie layer
-    hasher.update(b"eth_verkle_oct_2021");
+    hasher.update(seed);
     let bytes = hasher.finalize().to_vec();
 
     let u = bandersnatch::Fq::from_be_bytes_mod_order(&bytes);
@@ -306,7 +305,7 @@ fn open_multiproof_lagrange() {
     let point = 1;
     let y_i = poly.evaluate_in_domain(point);
 
-    let crs = CRS::new(n);
+    let crs = CRS::new(n, b"random seed");
     let poly_comm = crs.commit_lagrange_poly(&poly);
 
     let prover_query = ProverQuery {
@@ -346,7 +345,7 @@ fn open_multiproof_lagrange_2_polys() {
     let x_j = 2;
     let y_j = poly.evaluate_in_domain(x_j);
 
-    let crs = CRS::new(n);
+    let crs = CRS::new(n, b"random seed");
     let poly_comm = crs.commit_lagrange_poly(&poly);
 
     let prover_query_i = ProverQuery {
@@ -386,7 +385,7 @@ fn open_multiproof_lagrange_2_polys() {
 fn test_ipa_consistency() {
     use ark_serialize::CanonicalSerialize;
     let n = 256;
-    let crs = CRS::new(n);
+    let crs = CRS::new(n, b"eth_verkle_oct_2021");
     let precomp = PrecomputedWeights::new(n);
     let input_point = Fr::from(2101 as u128);
 
@@ -432,7 +431,7 @@ fn test_ipa_consistency() {
 fn multiproof_consistency() {
     use ark_serialize::CanonicalSerialize;
     let n = 256;
-    let crs = CRS::new(n);
+    let crs = CRS::new(n, b"eth_verkle_oct_2021");
     let precomp = PrecomputedWeights::new(n);
 
     // 1 to 32 repeated 8 times
@@ -501,7 +500,7 @@ fn crs_consistency() {
     use bandersnatch::Fq;
     use sha2::{Digest, Sha256};
 
-    let points = generate_random_elements(256);
+    let points = generate_random_elements(256, b"eth_verkle_oct_2021");
     for point in &points {
         let on_curve = point.is_on_curve();
         let in_correct_subgroup = point.is_in_correct_subgroup_assuming_on_curve();

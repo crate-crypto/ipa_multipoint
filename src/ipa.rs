@@ -373,7 +373,7 @@ mod tests {
     #[test]
     fn test_create_IPAProof_proof() {
         let n = 8;
-        let crs = CRS::new(n);
+        let crs = CRS::new(n, b"random seed");
 
         let mut rng = ChaCha20Rng::from_seed([0u8; 32]);
         let a: Vec<Fr> = (0..n).map(|_| Fr::rand(&mut rng)).collect();
