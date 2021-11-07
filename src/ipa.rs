@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 use crate::math_utils::inner_product;
-use crate::transcript::TranscriptProtocol;
+use crate::multiproof::CRS;
+use crate::transcript::{Transcript, TranscriptProtocol};
 use ark_ec::group::Group;
 use ark_ec::ProjectiveCurve;
 
@@ -11,35 +12,32 @@ use bandersnatch::multi_scalar_mul;
 use bandersnatch::EdwardsAffine;
 use bandersnatch::EdwardsProjective;
 use bandersnatch::Fr;
-use bandersnatch::GLVParameters;
 use itertools::Itertools;
-use merlin::Transcript;
+
 use std::borrow::Borrow;
 use std::iter;
 
 #[derive(Clone)]
 pub struct NoZK {
-    // From the literature this would be u_{-1}
     pub(crate) L_vec: Vec<EdwardsProjective>,
-    // From the literature this would be u_{+1}
     pub(crate) R_vec: Vec<EdwardsProjective>,
-    // From the literature, this would be w'
     pub(crate) a: Fr,
 }
 
 pub fn create(
     transcript: &mut Transcript,
-    mut G_Vec: Vec<EdwardsProjective>,
-    Q: &EdwardsProjective,
+    mut crs: CRS,
     mut a_vec: Vec<Fr>,
     a_comm: EdwardsProjective,
     mut b_vec: Vec<Fr>,
     // This is the z in f(z)
     input_point: Fr,
 ) -> NoZK {
+    transcript.domain_sep(b"ipa");
+
     let mut a = &mut a_vec[..];
     let mut b = &mut b_vec[..];
-    let mut G = &mut G_Vec[..];
+    let mut G = &mut crs.G[..];
 
     let n = G.len();
 
@@ -51,14 +49,14 @@ pub fn create(
     // All of the input vectors must have a length that is a power of two.
     assert!(n.is_power_of_two());
 
-    transcript.append_u64(b"n", n as u64);
+    // transcript.append_u64(b"n", n as u64);
     let output_point = inner_product(a, b);
+    transcript.append_point(b"C", &a_comm);
     transcript.append_scalar(b"input point", &input_point);
     transcript.append_scalar(b"output point", &output_point);
-    transcript.append_point(b"poly commit", &a_comm);
 
-    let z = transcript.challenge_scalar(b"z");
-    let Q = Q.mul(&z); // XXX: It would not hurt to add this augmented point into the transcript
+    let w = transcript.challenge_scalar(b"w");
+    let Q = (&crs.Q).mul(&w); // XXX: It would not hurt to add this augmented point into the transcript
 
     let num_rounds = log2(n);
 
@@ -88,7 +86,7 @@ pub fn create(
         transcript.append_point(b"L", &L);
         transcript.append_point(b"R", &R);
 
-        let x = transcript.challenge_scalar(b"folding challenge");
+        let x = transcript.challenge_scalar(b"x");
         let x_inv = x.inverse().unwrap();
         for i in 0..a_L.len() {
             a_L[i] = a_L[i] + x * a_R[i];
@@ -121,33 +119,32 @@ impl NoZK {
     pub fn verify(
         &self,
         transcript: &mut Transcript,
-        G_Vec: &[EdwardsProjective],
-        Q: &EdwardsProjective,
-        n: usize,
+        mut crs: CRS,
         mut b: Vec<Fr>,
         a_comm: EdwardsProjective,
         input_point: Fr,
         output_point: Fr,
     ) -> bool {
-        let mut G = G_Vec.to_owned();
-        let mut G = &mut G[..];
+        transcript.domain_sep(b"ipa");
+
+        let mut G = &mut crs.G[..];
         let mut b = &mut b[..];
 
         let num_rounds = self.L_vec.len();
 
         // Check that the prover computed an inner proof
         // over a vector of size n
-        if n != 1 << num_rounds {
+        if crs.n != 1 << num_rounds {
             return false;
         }
 
-        transcript.append_u64(b"n", n as u64);
+        // transcript.append_u64(b"n", n as u64);
+        transcript.append_point(b"C", &a_comm);
         transcript.append_scalar(b"input point", &input_point);
         transcript.append_scalar(b"output point", &output_point);
-        transcript.append_point(b"poly commit", &a_comm);
 
-        let z = transcript.challenge_scalar(b"z");
-        let Q = Q.mul(&z);
+        let w = transcript.challenge_scalar(b"w");
+        let Q = (&crs.Q).mul(&w);
 
         let num_rounds = self.L_vec.len();
 
@@ -189,30 +186,30 @@ impl NoZK {
     pub fn verify_multiexp(
         &self,
         transcript: &mut Transcript,
-        G_Vec: &[EdwardsProjective],
-        Q: &EdwardsProjective,
-        n: usize,
+        crs: &CRS,
         b_vec: Vec<Fr>,
         a_comm: EdwardsProjective,
         input_point: Fr,
         output_point: Fr,
     ) -> bool {
-        let logn = self.L_vec.len();
+        transcript.domain_sep(b"ipa");
 
+        let logn = self.L_vec.len();
+        let n = crs.n;
         // Check that the prover computed an inner proof
         // over a vector of size n
         if n != (1 << logn) {
             return false;
         }
 
-        transcript.append_u64(b"n", n as u64);
+        // transcript.append_u64(b"n", n as u64);
+        transcript.append_point(b"C", &a_comm);
         transcript.append_scalar(b"input point", &input_point);
         transcript.append_scalar(b"output point", &output_point);
-        transcript.append_point(b"poly commit", &a_comm);
 
         // Compute the scalar which will augment the point corresponding
         // to the inner product
-        let z = transcript.challenge_scalar(b"z");
+        let w = transcript.challenge_scalar(b"w");
 
         // Generate all of the necessary challenges and their inverses
         let challenges = generate_challenges(self, transcript);
@@ -236,7 +233,7 @@ impl NoZK {
         }
 
         let b_0 = inner_product(&b_vec, &b_i);
-        let q_i = z * (output_point + self.a * b_0);
+        let q_i = w * (output_point + self.a * b_0);
 
         slow_vartime_multiscalar_mul(
             challenges
@@ -249,13 +246,13 @@ impl NoZK {
                 .iter()
                 .chain(self.R_vec.iter())
                 .chain(iter::once(&a_comm))
-                .chain(iter::once(Q))
+                .chain(iter::once(&crs.Q))
                 // XXX: note that we can do a Halo style optimisation here also
                 // but instead of being (m log(d)) it will be O(mn) which is still good
                 // because the verifier will be doing m*n field operations instead of m size n multi-exponentiations
                 // This is done by interpreting g_i as coefficients in monomial basis
                 // TODO: Optimise the majority of the time is spent on this vector, precompute
-                .chain(G_Vec.iter()),
+                .chain(crs.G.iter()),
         )
         .is_zero()
     }
@@ -266,29 +263,29 @@ impl NoZK {
     pub fn verify_semi_multiexp(
         &self,
         transcript: &mut Transcript,
-        G_Vec: &[EdwardsProjective],
-        Q: &EdwardsProjective,
-        n: usize,
+        crs: &CRS,
         b_Vec: Vec<Fr>,
         a_comm: EdwardsProjective,
         input_point: Fr,
         output_point: Fr,
     ) -> bool {
-        let logn = self.L_vec.len();
+        transcript.domain_sep(b"ipa");
 
+        let logn = self.L_vec.len();
+        let n = crs.n;
         // Check that the prover computed an inner proof
         // over a vector of size n
         if n != (1 << logn) {
             return false;
         }
 
-        transcript.append_u64(b"n", n as u64);
+        // transcript.append_u64(b"n", n as u64);
+        transcript.append_point(b"C", &a_comm);
         transcript.append_scalar(b"input point", &input_point);
         transcript.append_scalar(b"output point", &output_point);
-        transcript.append_point(b"poly commit", &a_comm);
 
-        let z = transcript.challenge_scalar(b"z");
-        let Q = Q.mul(&z);
+        let w = transcript.challenge_scalar(b"w");
+        let Q = (&crs.Q).mul(&w);
 
         let a_comm = a_comm + (Q.mul(output_point.into_repr()));
 
@@ -321,7 +318,7 @@ impl NoZK {
         }
 
         let b_0 = inner_product(&b_Vec, &g_i);
-        let G_0 = slow_vartime_multiscalar_mul(g_i.iter(), G_Vec.iter()); // TODO: Optimise the majority of the time is spent on this vector, precompute
+        let G_0 = slow_vartime_multiscalar_mul(g_i.iter(), crs.G.iter()); // TODO: Optimise the majority of the time is spent on this vector, precompute
 
         let exp_P = G_0.mul(self.a.into_repr()) + Q.mul((self.a * b_0).into_repr());
 
@@ -356,7 +353,7 @@ fn generate_challenges(proof: &NoZK, transcript: &mut Transcript) -> Vec<Fr> {
         transcript.append_point(b"L", L);
         transcript.append_point(b"R", R);
 
-        let x_i = transcript.challenge_scalar(b"folding challenge");
+        let x_i = transcript.challenge_scalar(b"x");
         challenges.push(x_i);
     }
 
@@ -367,6 +364,7 @@ fn generate_challenges(proof: &NoZK, transcript: &mut Transcript) -> Vec<Fr> {
 mod tests {
     use super::*;
     use crate::math_utils::{inner_product, powers_of};
+    use crate::multiproof::CRS;
     use ark_std::rand;
     use ark_std::rand::SeedableRng;
     use ark_std::UniformRand;
@@ -375,25 +373,22 @@ mod tests {
     #[test]
     fn test_create_nozk_proof() {
         let n = 8;
+        let crs = CRS::new(n);
 
         let mut rng = ChaCha20Rng::from_seed([0u8; 32]);
-
         let a: Vec<Fr> = (0..n).map(|_| Fr::rand(&mut rng)).collect();
-
         let input_point = Fr::rand(&mut rng);
+
         let b = powers_of(input_point, n);
         let output_point = inner_product(&a, &b);
-        let G: Vec<EdwardsProjective> = (0..n).map(|_| EdwardsProjective::rand(&mut rng)).collect();
-        let Q = EdwardsProjective::rand(&mut rng);
 
         let mut prover_transcript = Transcript::new(b"ip_no_zk");
 
-        let P = slow_vartime_multiscalar_mul(a.iter(), G.iter());
+        let P = slow_vartime_multiscalar_mul(a.iter(), crs.G.iter());
 
         let proof = create(
             &mut prover_transcript,
-            G.clone(),
-            &Q,
+            crs.clone(),
             a,
             P,
             b.clone(),
@@ -401,12 +396,9 @@ mod tests {
         );
 
         let mut verifier_transcript = Transcript::new(b"ip_no_zk");
-
-        assert!(proof.verify_semi_multiexp(
+        assert!(proof.verify(
             &mut verifier_transcript,
-            &G,
-            &Q,
-            n,
+            crs,
             b,
             P,
             input_point,
