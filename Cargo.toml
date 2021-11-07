@@ -9,7 +9,7 @@ edition = "2018"
 rand = "0.6"
 merlin = "1.2.0"
 criterion = "0.3.4"
-bandersnatch = { git = "https://github.com/zhenfeizhang/bandersnatch" }
+bandersnatch = "0.1.1"
 ark-ff = { version = "^0.3.0", default-features = false }
 ark-ec = { version = "^0.3.0", default-features = false }
 ark-std = { version = "^0.3.0", default-features = false }
@@ -17,6 +17,8 @@ ark-serialize = { version = "^0.3.0", default-features = false }
 ark-poly = { version = "^0.3.0", default-features = false }
 rand_chacha = { version = "0.3.0", default-features = false }
 itertools = "0.10.1"
+sha2 = "0.9.8"
+hex = "0.4.3"
 [[bench]]
 name = "benchmark_main"
 harness = false
