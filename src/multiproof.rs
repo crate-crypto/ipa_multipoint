@@ -106,7 +106,7 @@ fn group_prover_queries<'a>(
 
 impl MultiPoint {
     pub fn open(
-        crs: &CRS, // XXX: Change this from &self to self
+        crs: CRS,
         precomp: &PrecomputedWeights,
         transcript: &mut Transcript,
         queries: Vec<ProverQuery>,
@@ -283,7 +283,7 @@ impl MultiPointProof {
 // TODO: we could probably get rid of this method altogether and just do this in the multiproof
 // TODO method
 pub(crate) fn open_point_outside_of_domain(
-    crs: &CRS,
+    crs: CRS,
     precomp: &PrecomputedWeights,
     transcript: &mut Transcript,
     polynomial: LagrangeBasis,
@@ -292,7 +292,7 @@ pub(crate) fn open_point_outside_of_domain(
 ) -> NoZK {
     let a = polynomial.values().to_vec();
     let b = LagrangeBasis::evaluate_lagrange_coefficients(precomp, crs.n, z_i);
-    crate::ipa::create(transcript, crs.clone(), a, commitment, b, z_i)
+    crate::ipa::create(transcript, crs, a, commitment, b, z_i)
 }
 
 #[test]
@@ -321,7 +321,12 @@ fn open_multiproof_lagrange() {
     let precomp = PrecomputedWeights::new(n);
 
     let mut transcript = Transcript::new(b"foo");
-    let multiproof = MultiPoint::open(&crs, &precomp, &mut transcript, vec![prover_query.clone()]);
+    let multiproof = MultiPoint::open(
+        crs.clone(),
+        &precomp,
+        &mut transcript,
+        vec![prover_query.clone()],
+    );
 
     let mut transcript = Transcript::new(b"foo");
     let verifier_query: VerifierQuery = prover_query.into();
@@ -363,7 +368,7 @@ fn open_multiproof_lagrange_2_polys() {
 
     let mut transcript = Transcript::new(b"foo");
     let multiproof = MultiPoint::open(
-        &crs,
+        crs.clone(),
         &precomp,
         &mut transcript,
         vec![prover_query_i.clone(), prover_query_j.clone()],
@@ -393,7 +398,7 @@ fn test_ipa_consistency() {
     let mut prover_transcript = Transcript::new(b"test");
 
     let proof = open_point_outside_of_domain(
-        &crs,
+        crs.clone(),
         &precomp,
         &mut prover_transcript,
         polynomial,
@@ -466,7 +471,7 @@ fn multiproof_consistency() {
 
     let mut prover_transcript = Transcript::new(b"test");
     let multiproof = MultiPoint::open(
-        &crs,
+        crs.clone(),
         &precomp,
         &mut prover_transcript,
         vec![prover_query_a.clone(), prover_query_b.clone()],
