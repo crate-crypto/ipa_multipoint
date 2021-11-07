@@ -47,6 +47,7 @@ fn generate_random_elements(num_required_points: usize) -> Vec<EdwardsAffine> {
     use sha2::{Digest, Sha256};
 
     let mut hasher = Sha256::new();
+
     // TODO: make this seed a parameter and pass it from the verkle trie layer
     hasher.update(b"eth_verkle_oct_2021");
     let bytes = hasher.finalize().to_vec();
@@ -64,10 +65,10 @@ fn generate_random_elements(num_required_points: usize) -> Vec<EdwardsAffine> {
         .collect()
 }
 
-pub struct MultiOpen;
+pub struct MultiPoint;
 
 #[derive(Clone, Debug)]
-pub struct ProverQueryLagrange {
+pub struct ProverQuery {
     pub comm: EdwardsProjective,
     pub poly: LagrangeBasis,
     // Given a function f, we use z_i to denote the input point and y_i to denote the output, ie f(z_i) = y_i
@@ -75,8 +76,8 @@ pub struct ProverQueryLagrange {
     pub y_i: Fr,
 }
 
-impl From<ProverQueryLagrange> for VerifierQuery {
-    fn from(pq: ProverQueryLagrange) -> Self {
+impl From<ProverQuery> for VerifierQuery {
+    fn from(pq: ProverQuery) -> Self {
         VerifierQuery {
             comm: pq.comm,
             z_i: Fr::from(pq.z_i as u128),
@@ -86,16 +87,15 @@ impl From<ProverQueryLagrange> for VerifierQuery {
 }
 pub struct VerifierQuery {
     comm: EdwardsProjective,
-    // z_i is z_i in the hackmd. Maybe change the hackmd as f(z_i) = y_i is more intuitive
     z_i: Fr,
     y_i: Fr,
 }
 
-//XXX: change into group_prover_queries_by_polynomial
+//XXX: change to group_prover_queries_by_point
 fn group_prover_queries<'a>(
-    prover_queries: &'a [ProverQueryLagrange],
+    prover_queries: &'a [ProverQuery],
     challenges: &'a [Fr],
-) -> HashMap<usize, Vec<(&'a ProverQueryLagrange, &'a Fr)>> {
+) -> HashMap<usize, Vec<(&'a ProverQuery, &'a Fr)>> {
     // We want to group all of the polynomials which are evaluated at the same point together
     use itertools::Itertools;
     prover_queries
@@ -104,13 +104,13 @@ fn group_prover_queries<'a>(
         .into_group_map_by(|x| x.0.z_i)
 }
 
-impl MultiOpen {
-    pub fn open_multiple_lagrange(
+impl MultiPoint {
+    pub fn open(
         crs: &CRS, // XXX: Change this from &self to self
         precomp: &PrecomputedWeights,
         transcript: &mut Transcript,
-        queries: Vec<ProverQueryLagrange>,
-    ) -> MultiOpenProof {
+        queries: Vec<ProverQuery>,
+    ) -> MultiPointProof {
         transcript.domain_sep(b"multiproof");
         // 1. Compute `r`
         //
@@ -209,19 +209,19 @@ impl MultiOpen {
         // 4. Compute the IPA for g_3
         let g_3_ipa = open_point_outside_of_domain(crs, precomp, transcript, g_3_x, g_3_x_comm, t);
 
-        MultiOpenProof {
+        MultiPointProof {
             open_proof: g_3_ipa,
             g_x_comm: g_x_comm,
         }
     }
 }
 
-pub struct MultiOpenProof {
+pub struct MultiPointProof {
     open_proof: NoZK,
     g_x_comm: EdwardsProjective,
 }
 
-impl MultiOpenProof {
+impl MultiPointProof {
     pub fn check(
         &self,
         crs: &CRS,
@@ -273,7 +273,7 @@ impl MultiOpenProof {
         let g3_comm = g1_comm - self.g_x_comm;
 
         // Check IPA
-        let b = LagrangeBasis::evaluate_lagrange_coefficients(&precomp, crs.n, t);
+        let b = LagrangeBasis::evaluate_lagrange_coefficients(&precomp, crs.n, t); // TODO: we could put this as a method on PrecomputedWeights
 
         self.open_proof
             .verify_multiexp(transcript, crs, b, g3_comm, t, g2_t)
@@ -311,7 +311,7 @@ fn open_multiproof_lagrange() {
     let crs = CRS::new(n);
     let poly_comm = crs.commit_lagrange_poly(&poly);
 
-    let prover_query = ProverQueryLagrange {
+    let prover_query = ProverQuery {
         comm: poly_comm,
         poly: poly,
         z_i: point,
@@ -321,12 +321,7 @@ fn open_multiproof_lagrange() {
     let precomp = PrecomputedWeights::new(n);
 
     let mut transcript = Transcript::new(b"foo");
-    let multiproof = MultiOpen::open_multiple_lagrange(
-        &crs,
-        &precomp,
-        &mut transcript,
-        vec![prover_query.clone()],
-    );
+    let multiproof = MultiPoint::open(&crs, &precomp, &mut transcript, vec![prover_query.clone()]);
 
     let mut transcript = Transcript::new(b"foo");
     let verifier_query: VerifierQuery = prover_query.into();
@@ -351,13 +346,13 @@ fn open_multiproof_lagrange_2_polys() {
     let crs = CRS::new(n);
     let poly_comm = crs.commit_lagrange_poly(&poly);
 
-    let prover_query_i = ProverQueryLagrange {
+    let prover_query_i = ProverQuery {
         comm: poly_comm,
         poly: poly.clone(),
         z_i: z_i,
         y_i: y_i,
     };
-    let prover_query_j = ProverQueryLagrange {
+    let prover_query_j = ProverQuery {
         comm: poly_comm,
         poly: poly,
         z_i: x_j,
@@ -367,7 +362,7 @@ fn open_multiproof_lagrange_2_polys() {
     let precomp = PrecomputedWeights::new(n);
 
     let mut transcript = Transcript::new(b"foo");
-    let multiproof = MultiOpen::open_multiple_lagrange(
+    let multiproof = MultiPoint::open(
         &crs,
         &precomp,
         &mut transcript,
@@ -456,13 +451,13 @@ fn multiproof_consistency() {
     let poly_comm_a = crs.commit_lagrange_poly(&polynomial_a);
     let poly_comm_b = crs.commit_lagrange_poly(&polynomial_b);
 
-    let prover_query_a = ProverQueryLagrange {
+    let prover_query_a = ProverQuery {
         comm: poly_comm_a,
         poly: polynomial_a,
         z_i: point_a,
         y_i: y_a,
     };
-    let prover_query_b = ProverQueryLagrange {
+    let prover_query_b = ProverQuery {
         comm: poly_comm_b,
         poly: polynomial_b,
         z_i: point_b,
@@ -470,7 +465,7 @@ fn multiproof_consistency() {
     };
 
     let mut prover_transcript = Transcript::new(b"test");
-    let multiproof = MultiOpen::open_multiple_lagrange(
+    let multiproof = MultiPoint::open(
         &crs,
         &precomp,
         &mut prover_transcript,
