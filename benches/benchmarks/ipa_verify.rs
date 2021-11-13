@@ -3,11 +3,11 @@ use ark_std::rand::SeedableRng;
 use ark_std::UniformRand;
 use bandersnatch::{EdwardsProjective, Fr};
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
-use ipa_bandersnatch::ipa::create;
-use ipa_bandersnatch::math_utils::{inner_product, powers_of};
-use ipa_bandersnatch::slow_vartime_multiscalar_mul;
-use ipa_bandersnatch::transcript::TranscriptProtocol;
-use merlin::Transcript;
+use ipa_multipoint::ipa::create;
+use ipa_multipoint::math_utils::{inner_product, powers_of};
+use ipa_multipoint::slow_vartime_multiscalar_mul;
+use ipa_multipoint::transcript::{Transcript, TranscriptProtocol};
+
 use rand_chacha::ChaCha20Rng;
 use std::iter;
 

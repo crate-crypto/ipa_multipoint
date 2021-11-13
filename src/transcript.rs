@@ -10,6 +10,7 @@ pub trait TranscriptProtocol {
 
 use ark_serialize::CanonicalSerialize;
 use sha2::{Digest, Sha256};
+#[derive(Debug, Clone)]
 pub struct Transcript {
     state: Sha256,
 }

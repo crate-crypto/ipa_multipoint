@@ -1,8 +1,7 @@
 // We get given multiple polynomials evaluated at different points
 #![allow(non_snake_case)]
 
-use std::collections::HashMap;
-
+use crate::crs::{basic::BasicCommit, CRSCommitter, CRS};
 use crate::ipa::{self, IPAProof};
 use crate::lagrange_basis::{LagrangeBasis, PrecomputedWeights};
 use crate::math_utils::inner_product;
@@ -20,57 +19,7 @@ use bandersnatch::multi_scalar_mul;
 use bandersnatch::EdwardsAffine;
 use bandersnatch::EdwardsProjective;
 use bandersnatch::Fr;
-#[derive(Debug, Clone)]
-pub struct CRS {
-    pub n: usize,
-    pub G: Vec<EdwardsProjective>,
-    pub Q: EdwardsProjective,
-}
-
-impl CRS {
-    pub fn new(n: usize, seed: &'static [u8]) -> CRS {
-        let G: Vec<_> = generate_random_elements(n, seed)
-            .into_iter()
-            .map(|affine_point| affine_point.into_projective())
-            .collect();
-        let Q = EdwardsProjective::prime_subgroup_generator();
-        CRS { n, G, Q }
-    }
-
-    pub fn commit_lagrange_poly(&self, polynomial: &LagrangeBasis) -> EdwardsProjective {
-        slow_vartime_multiscalar_mul(polynomial.values().iter(), self.G.iter())
-    }
-}
-
-impl std::ops::Index<usize> for CRS {
-    type Output = EdwardsProjective;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.G[index]
-    }
-}
-
-fn generate_random_elements(num_required_points: usize, seed: &'static [u8]) -> Vec<EdwardsAffine> {
-    use bandersnatch::Fq;
-    use sha2::{Digest, Sha256};
-
-    let mut hasher = Sha256::new();
-
-    hasher.update(seed);
-    let bytes = hasher.finalize().to_vec();
-
-    let u = bandersnatch::Fq::from_be_bytes_mod_order(&bytes);
-    let choose_largest = false;
-
-    (0..)
-        .into_iter()
-        .map(|i| Fq::from(i as u128) + u)
-        .map(|x| EdwardsAffine::get_point_from_x(x, choose_largest))
-        .filter_map(|point| point)
-        .filter(|point| point.is_in_correct_subgroup_assuming_on_curve())
-        .take(num_required_points)
-        .collect()
-}
+use std::collections::HashMap;
 
 pub struct MultiPoint;
 
@@ -112,8 +61,8 @@ fn group_prover_queries<'a>(
 }
 
 impl MultiPoint {
-    pub fn open(
-        crs: CRS,
+    pub fn open<C: CRSCommitter>(
+        crs: CRS<C>,
         precomp: &PrecomputedWeights,
         transcript: &mut Transcript,
         queries: Vec<ProverQuery>,
@@ -227,9 +176,9 @@ pub struct MultiPointProof {
 }
 
 impl MultiPointProof {
-    pub fn check(
+    pub fn check<C: CRSCommitter>(
         &self,
-        crs: &CRS,
+        crs: &CRS<C>,
         precomp: &PrecomputedWeights,
         queries: &[VerifierQuery],
         transcript: &mut Transcript,
@@ -287,8 +236,8 @@ impl MultiPointProof {
 
 // TODO: we could probably get rid of this method altogether and just do this in the multiproof
 // TODO method
-pub(crate) fn open_point_outside_of_domain(
-    crs: CRS,
+pub(crate) fn open_point_outside_of_domain<C: CRSCommitter>(
+    crs: CRS<C>,
     precomp: &PrecomputedWeights,
     transcript: &mut Transcript,
     polynomial: LagrangeBasis,
@@ -313,7 +262,7 @@ fn open_multiproof_lagrange() {
     let point = 1;
     let y_i = poly.evaluate_in_domain(point);
 
-    let crs = CRS::new(n, b"random seed");
+    let crs = CRS::<BasicCommit>::new(n, b"random seed");
     let poly_comm = crs.commit_lagrange_poly(&poly);
 
     let prover_query = ProverQuery {
@@ -353,7 +302,7 @@ fn open_multiproof_lagrange_2_polys() {
     let x_j = 2;
     let y_j = poly.evaluate_in_domain(x_j);
 
-    let crs = CRS::new(n, b"random seed");
+    let crs = CRS::<BasicCommit>::new(n, b"random seed");
     let poly_comm = crs.commit_lagrange_poly(&poly);
 
     let prover_query_i = ProverQuery {
@@ -393,7 +342,7 @@ fn open_multiproof_lagrange_2_polys() {
 fn test_ipa_consistency() {
     use ark_serialize::CanonicalSerialize;
     let n = 256;
-    let crs = CRS::new(n, b"eth_verkle_oct_2021");
+    let crs = CRS::<BasicCommit>::new(n, b"eth_verkle_oct_2021");
     let precomp = PrecomputedWeights::new(n);
     let input_point = Fr::from(2101 as u128);
 
@@ -439,7 +388,7 @@ fn test_ipa_consistency() {
 fn multiproof_consistency() {
     use ark_serialize::CanonicalSerialize;
     let n = 256;
-    let crs = CRS::new(n, b"eth_verkle_oct_2021");
+    let crs = CRS::<BasicCommit>::new(n, b"eth_verkle_oct_2021");
     let precomp = PrecomputedWeights::new(n);
 
     // 1 to 32 repeated 8 times
@@ -499,52 +448,4 @@ fn multiproof_consistency() {
         &[verifier_query_a, verifier_query_b],
         &mut verifier_transcript
     ));
-}
-
-#[test]
-fn crs_consistency() {
-    // See: https://hackmd.io/1RcGSMQgT4uREaq1CCx_cg#Methodology
-    use ark_serialize::CanonicalSerialize;
-    use bandersnatch::Fq;
-    use sha2::{Digest, Sha256};
-
-    let points = generate_random_elements(256, b"eth_verkle_oct_2021");
-    for point in &points {
-        let on_curve = point.is_on_curve();
-        let in_correct_subgroup = point.is_in_correct_subgroup_assuming_on_curve();
-        if !on_curve {
-            panic!("generated a point which is not on the curve")
-        }
-        if !in_correct_subgroup {
-            panic!("generated a point which is not in the prime subgroup")
-        }
-    }
-
-    let mut bytes = [0u8; 32];
-    points[0].serialize(&mut bytes[..]).unwrap();
-    assert_eq!(
-        hex::encode(&bytes),
-        "22ac968a98ab6c50379fc8b039abc8fd9aca259f4746a05bfbdf12c86463c208",
-        "the first point is incorrect"
-    );
-    let mut bytes = [0u8; 32];
-    points[255].serialize(&mut bytes[..]).unwrap();
-    assert_eq!(
-        hex::encode(&bytes),
-        "c8b4968a98ab6c50379fc8b039abc8fd9aca259f4746a05bfbdf12c86463c208",
-        "the 256th (last) point is incorrect"
-    );
-
-    let mut hasher = Sha256::new();
-    for point in &points {
-        let mut bytes = [0u8; 32];
-        point.serialize(&mut bytes[..]).unwrap();
-        hasher.update(&bytes);
-    }
-    let bytes = hasher.finalize().to_vec();
-    assert_eq!(
-        hex::encode(&bytes),
-        "c390cbb4bc42019685d5a01b2fb8a536d4332ea4e128934d0ae7644163089e76",
-        "unexpected point encountered"
-    );
 }

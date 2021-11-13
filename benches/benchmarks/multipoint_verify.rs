@@ -4,13 +4,15 @@ use ark_std::rand::SeedableRng;
 use ark_std::UniformRand;
 use bandersnatch::{EdwardsProjective, Fr};
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
-use ipa_bandersnatch::ipa::create;
-use ipa_bandersnatch::lagrange_basis::*;
-use ipa_bandersnatch::math_utils::inner_product;
-use ipa_bandersnatch::multiproof::*;
-use ipa_bandersnatch::slow_vartime_multiscalar_mul;
-use ipa_bandersnatch::transcript::TranscriptProtocol;
-use merlin::Transcript;
+use ipa_multipoint::crs::BasicCRS;
+use ipa_multipoint::crs::PrecomputedCRS;
+use ipa_multipoint::ipa::create;
+use ipa_multipoint::lagrange_basis::*;
+use ipa_multipoint::math_utils::inner_product;
+use ipa_multipoint::multiproof::*;
+use ipa_multipoint::slow_vartime_multiscalar_mul;
+use ipa_multipoint::transcript::{Transcript, TranscriptProtocol};
+
 use rand_chacha::ChaCha20Rng;
 use std::iter;
 
@@ -24,7 +26,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     // Setup parameters, n is the degree + 1
     // CRs is the G_Vec, H_Vec, Q group elements
     let n = 256;
-    let crs = CRS::new(n);
+    let crs = PrecomputedCRS::new(n, b"random seed");
 
     let mut rng = test_rng();
     let poly = LagrangeBasis::new((0..n).map(|_| Fr::rand(&mut rng)).collect());
@@ -43,10 +45,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             let point = 1;
             let y_i = poly.evaluate_in_domain(point);
 
-            let prover_query = ProverQueryLagrange {
+            let prover_query = ProverQuery {
                 comm: poly_comm.clone(),
                 poly: poly,
-                x_i: point,
+                z_i: point,
                 y_i,
             };
 
@@ -56,8 +58,8 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let precomp = PrecomputedWeights::new(n);
 
         let mut transcript = Transcript::new(b"foo");
-        let multiproof = MultiOpen::open_multiple_lagrange(
-            &crs,
+        let multiproof = MultiPoint::open(
+            crs.clone(),
             &precomp,
             &mut transcript,
             prover_queries.clone(),
@@ -76,13 +78,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 b.iter_batched(
                     || transcript.clone(),
                     |mut transcript| {
-                        multiproof.check_single_lagrange(
-                            &crs,
-                            &precomp,
-                            &verifier_queries,
-                            &mut transcript,
-                            n,
-                        )
+                        multiproof.check(&crs, &precomp, &verifier_queries, &mut transcript)
                     },
                     BatchSize::SmallInput,
                 )

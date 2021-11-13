@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
+use crate::crs::{CRSCommitter, CRS};
 use crate::math_utils::inner_product;
-use crate::multiproof::CRS;
 use crate::transcript::{Transcript, TranscriptProtocol};
 use ark_ec::group::Group;
 use ark_ec::ProjectiveCurve;
@@ -24,9 +24,9 @@ pub struct IPAProof {
     pub(crate) a: Fr,
 }
 
-pub fn create(
+pub fn create<C: CRSCommitter>(
     transcript: &mut Transcript,
-    mut crs: CRS,
+    mut crs: CRS<C>,
     mut a_vec: Vec<Fr>,
     a_comm: EdwardsProjective,
     mut b_vec: Vec<Fr>,
@@ -116,10 +116,10 @@ fn log2(n: usize) -> u32 {
 }
 
 impl IPAProof {
-    pub fn verify(
+    pub fn verify<C: CRSCommitter>(
         &self,
         transcript: &mut Transcript,
-        mut crs: CRS,
+        mut crs: CRS<C>,
         mut b: Vec<Fr>,
         a_comm: EdwardsProjective,
         input_point: Fr,
@@ -183,10 +183,10 @@ impl IPAProof {
 
         exp_P == a_comm
     }
-    pub fn verify_multiexp(
+    pub fn verify_multiexp<C: CRSCommitter>(
         &self,
         transcript: &mut Transcript,
-        crs: &CRS,
+        crs: &CRS<C>,
         b_vec: Vec<Fr>,
         a_comm: EdwardsProjective,
         input_point: Fr,
@@ -234,14 +234,15 @@ impl IPAProof {
 
         let b_0 = inner_product(&b_vec, &b_i);
         let q_i = w * (output_point + self.a * b_0);
+        let g_0 = crs.commit_full(&g_i);
 
-        slow_vartime_multiscalar_mul(
+        let result = slow_vartime_multiscalar_mul(
             challenges
                 .iter()
                 .chain(challenges_inv.iter())
                 .chain(iter::once(&Fr::one()))
-                .chain(iter::once(&q_i))
-                .chain(g_i.iter()),
+                .chain(iter::once(&q_i)),
+                // .chain(g_i.iter()),
             self.L_vec
                 .iter()
                 .chain(self.R_vec.iter())
@@ -251,19 +252,19 @@ impl IPAProof {
                 // but instead of being (m log(d)) it will be O(mn) which is still good
                 // because the verifier will be doing m*n field operations instead of m size n multi-exponentiations
                 // This is done by interpreting g_i as coefficients in monomial basis
-                // TODO: Optimise the majority of the time is spent on this vector, precompute
-                .chain(crs.G.iter()),
-        )
-        .is_zero()
+                // XXX: Optimise the majority of the time is spent on this vector, precompute
+                // .chain(crs.G.iter()),
+        ) + g_0;
+        result.is_zero()
     }
     // It's only semi unrolled.
     // This is being committed incase someone goes through the git history
     // The fully unrolled code is not that intuitive, but maybe this semi
     // unrolled version can help you to figure out the gap
-    pub fn verify_semi_multiexp(
+    pub fn verify_semi_multiexp<C: CRSCommitter>(
         &self,
         transcript: &mut Transcript,
-        crs: &CRS,
+        crs: &CRS<C>,
         b_Vec: Vec<Fr>,
         a_comm: EdwardsProjective,
         input_point: Fr,
@@ -318,7 +319,7 @@ impl IPAProof {
         }
 
         let b_0 = inner_product(&b_Vec, &g_i);
-        let G_0 = slow_vartime_multiscalar_mul(g_i.iter(), crs.G.iter()); // TODO: Optimise the majority of the time is spent on this vector, precompute
+        let G_0 = crs.commit_full(&g_i);
 
         let exp_P = G_0.mul(self.a.into_repr()) + Q.mul((self.a * b_0).into_repr());
 
@@ -363,8 +364,8 @@ fn generate_challenges(proof: &IPAProof, transcript: &mut Transcript) -> Vec<Fr>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::crs::{basic::BasicCommit, CRS};
     use crate::math_utils::{inner_product, powers_of};
-    use crate::multiproof::CRS;
     use ark_std::rand;
     use ark_std::rand::SeedableRng;
     use ark_std::UniformRand;
@@ -373,7 +374,7 @@ mod tests {
     #[test]
     fn test_create_IPAProof_proof() {
         let n = 8;
-        let crs = CRS::new(n, b"random seed");
+        let crs = CRS::<BasicCommit>::new(n, b"random seed");
 
         let mut rng = ChaCha20Rng::from_seed([0u8; 32]);
         let a: Vec<Fr> = (0..n).map(|_| Fr::rand(&mut rng)).collect();
@@ -395,6 +396,24 @@ mod tests {
             input_point,
         );
 
+        let mut verifier_transcript = Transcript::new(b"ip_no_zk");
+        assert!(proof.verify_semi_multiexp(
+            &mut verifier_transcript,
+            &crs,
+            b.clone(),
+            P,
+            input_point,
+            output_point
+        ));
+        let mut verifier_transcript = Transcript::new(b"ip_no_zk");
+        assert!(proof.verify_multiexp(
+            &mut verifier_transcript,
+            &crs,
+            b.clone(),
+            P,
+            input_point,
+            output_point
+        ));
         let mut verifier_transcript = Transcript::new(b"ip_no_zk");
         assert!(proof.verify(
             &mut verifier_transcript,

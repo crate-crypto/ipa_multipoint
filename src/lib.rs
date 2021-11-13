@@ -5,4 +5,5 @@ pub mod transcript;
 
 pub use ipa::slow_vartime_multiscalar_mul;
 
+pub mod crs;
 pub mod lagrange_basis;
