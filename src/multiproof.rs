@@ -20,7 +20,7 @@ use bandersnatch::multi_scalar_mul;
 use bandersnatch::EdwardsAffine;
 use bandersnatch::EdwardsProjective;
 use bandersnatch::Fr;
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct CRS {
     pub n: usize,
     pub G: Vec<EdwardsProjective>,
