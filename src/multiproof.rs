@@ -42,6 +42,14 @@ impl CRS {
     }
 }
 
+impl std::ops::Index<usize> for CRS {
+    type Output = EdwardsProjective;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.G[index]
+    }
+}
+
 fn generate_random_elements(num_required_points: usize, seed: &'static [u8]) -> Vec<EdwardsAffine> {
     use bandersnatch::Fq;
     use sha2::{Digest, Sha256};
