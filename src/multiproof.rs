@@ -93,9 +93,9 @@ impl From<ProverQuery> for VerifierQuery {
     }
 }
 pub struct VerifierQuery {
-    comm: EdwardsProjective,
-    z_i: Fr,
-    y_i: Fr,
+    pub comm: EdwardsProjective,
+    pub z_i: Fr,
+    pub y_i: Fr,
 }
 
 //XXX: change to group_prover_queries_by_point
