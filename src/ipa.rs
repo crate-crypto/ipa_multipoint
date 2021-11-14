@@ -17,7 +17,7 @@ use itertools::Itertools;
 use std::borrow::Borrow;
 use std::iter;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct IPAProof {
     pub(crate) L_vec: Vec<EdwardsProjective>,
     pub(crate) R_vec: Vec<EdwardsProjective>,

@@ -76,26 +76,26 @@ pub struct MultiPoint;
 
 #[derive(Clone, Debug)]
 pub struct ProverQuery {
-    pub comm: EdwardsProjective,
+    pub commitment: EdwardsProjective,
     pub poly: LagrangeBasis,
     // Given a function f, we use z_i to denote the input point and y_i to denote the output, ie f(z_i) = y_i
-    pub z_i: usize,
-    pub y_i: Fr,
+    pub point: usize,
+    pub result: Fr,
 }
 
 impl From<ProverQuery> for VerifierQuery {
     fn from(pq: ProverQuery) -> Self {
         VerifierQuery {
-            comm: pq.comm,
-            z_i: Fr::from(pq.z_i as u128),
-            y_i: pq.y_i,
+            commitment: pq.commitment,
+            point: Fr::from(pq.point as u128),
+            result: pq.result,
         }
     }
 }
 pub struct VerifierQuery {
-    pub comm: EdwardsProjective,
-    pub z_i: Fr,
-    pub y_i: Fr,
+    pub commitment: EdwardsProjective,
+    pub point: Fr,
+    pub result: Fr,
 }
 
 //XXX: change to group_prover_queries_by_point
@@ -108,7 +108,7 @@ fn group_prover_queries<'a>(
     prover_queries
         .iter()
         .zip(challenges.iter())
-        .into_group_map_by(|x| x.0.z_i)
+        .into_group_map_by(|x| x.0.point)
 }
 
 impl MultiPoint {
@@ -123,12 +123,12 @@ impl MultiPoint {
         //
         // Add points and evaluations
         for query in queries.iter() {
-            transcript.append_point(b"C", &query.comm);
-            transcript.append_scalar(b"z", &Fr::from(query.z_i as u128));
+            transcript.append_point(b"C", &query.commitment);
+            transcript.append_scalar(b"z", &Fr::from(query.point as u128));
             // XXX: note that since we are always opening on the domain
             // the prover does not need to pass y_i explicitly
             // It's just an index operation on the lagrange basis
-            transcript.append_scalar(b"y", &query.y_i)
+            transcript.append_scalar(b"y", &query.result)
         }
 
         let r = transcript.challenge_scalar(b"r");
@@ -220,7 +220,7 @@ impl MultiPoint {
         }
     }
 }
-
+#[derive(Debug, Clone)]
 pub struct MultiPointProof {
     open_proof: IPAProof,
     g_x_comm: EdwardsProjective,
@@ -239,9 +239,9 @@ impl MultiPointProof {
         //
         // Add points and evaluations
         for query in queries.iter() {
-            transcript.append_point(b"C", &query.comm);
-            transcript.append_scalar(b"z", &query.z_i);
-            transcript.append_scalar(b"y", &query.y_i);
+            transcript.append_point(b"C", &query.commitment);
+            transcript.append_scalar(b"z", &query.point);
+            transcript.append_scalar(b"y", &query.result);
         }
 
         let r = transcript.challenge_scalar(b"r");
@@ -253,7 +253,7 @@ impl MultiPointProof {
 
         // 3. Compute g_2(t)
         //
-        let mut g2_den: Vec<_> = queries.iter().map(|query| t - query.z_i).collect();
+        let mut g2_den: Vec<_> = queries.iter().map(|query| t - query.point).collect();
         batch_inversion(&mut g2_den);
 
         let helper_scalars: Vec<_> = powers_of_r
@@ -265,11 +265,11 @@ impl MultiPointProof {
         let g2_t: Fr = helper_scalars
             .iter()
             .zip(queries.iter())
-            .map(|(r_i_den_inv, query)| *r_i_den_inv * query.y_i)
+            .map(|(r_i_den_inv, query)| *r_i_den_inv * query.result)
             .sum();
 
         //4. Compute [g_1(X)] = E
-        let comms: Vec<_> = queries.into_iter().map(|query| query.comm).collect();
+        let comms: Vec<_> = queries.into_iter().map(|query| query.commitment).collect();
         let g1_comm = slow_vartime_multiscalar_mul(helper_scalars.iter(), comms.iter());
 
         transcript.append_point(b"E", &g1_comm);
@@ -317,10 +317,10 @@ fn open_multiproof_lagrange() {
     let poly_comm = crs.commit_lagrange_poly(&poly);
 
     let prover_query = ProverQuery {
-        comm: poly_comm,
-        poly: poly,
-        z_i: point,
-        y_i,
+        commitment: poly_comm,
+        poly,
+        point,
+        result: y_i,
     };
 
     let precomp = PrecomputedWeights::new(n);
@@ -357,16 +357,16 @@ fn open_multiproof_lagrange_2_polys() {
     let poly_comm = crs.commit_lagrange_poly(&poly);
 
     let prover_query_i = ProverQuery {
-        comm: poly_comm,
+        commitment: poly_comm,
         poly: poly.clone(),
-        z_i: z_i,
-        y_i: y_i,
+        point: z_i,
+        result: y_i,
     };
     let prover_query_j = ProverQuery {
-        comm: poly_comm,
+        commitment: poly_comm,
         poly: poly,
-        z_i: x_j,
-        y_i: y_j,
+        point: x_j,
+        result: y_j,
     };
 
     let precomp = PrecomputedWeights::new(n);
@@ -462,16 +462,16 @@ fn multiproof_consistency() {
     let poly_comm_b = crs.commit_lagrange_poly(&polynomial_b);
 
     let prover_query_a = ProverQuery {
-        comm: poly_comm_a,
+        commitment: poly_comm_a,
         poly: polynomial_a,
-        z_i: point_a,
-        y_i: y_a,
+        point: point_a,
+        result: y_a,
     };
     let prover_query_b = ProverQuery {
-        comm: poly_comm_b,
+        commitment: poly_comm_b,
         poly: polynomial_b,
-        z_i: point_b,
-        y_i: y_b,
+        point: point_b,
+        result: y_b,
     };
 
     let mut prover_transcript = Transcript::new(b"test");
