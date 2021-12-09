@@ -3,25 +3,83 @@ use crate::math_utils::inner_product;
 use crate::multiproof::CRS;
 use crate::transcript::{Transcript, TranscriptProtocol};
 use ark_ec::group::Group;
-use ark_ec::ProjectiveCurve;
-
+use ark_ec::{AffineCurve, ProjectiveCurve};
 use ark_ff::Field;
 use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bandersnatch::multi_scalar_mul;
 use bandersnatch::EdwardsAffine;
 use bandersnatch::EdwardsProjective;
 use bandersnatch::Fr;
 use itertools::Itertools;
 
+use crate::{IOError, IOErrorKind, IOResult};
+use std::io::{Read, Write};
+
 use std::borrow::Borrow;
 use std::iter;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IPAProof {
     pub(crate) L_vec: Vec<EdwardsProjective>,
     pub(crate) R_vec: Vec<EdwardsProjective>,
     pub(crate) a: Fr,
+}
+
+impl IPAProof {
+    pub(crate) fn serialised_size(&self) -> usize {
+        (self.L_vec.len() * 2 + 1) * 32
+    }
+    pub fn from_bytes(bytes: &[u8], poly_degree: usize) -> IOResult<IPAProof> {
+        // Given the polynomial degree, we will have log2 * 2 points
+        let num_points = log2(poly_degree);
+        let mut L_vec = Vec::with_capacity(num_points as usize);
+        let mut R_vec = Vec::with_capacity(num_points as usize);
+
+        assert_eq!(((num_points * 2) + 1) * 32, bytes.len() as u32);
+        assert!(bytes.len() % 32 == 0);
+
+        // Chunk the byte slice into 32 bytes
+        let mut chunks = bytes.chunks_exact(32);
+
+        for _ in 0..num_points {
+            let chunk = chunks.next().unwrap();
+            let point: EdwardsAffine = CanonicalDeserialize::deserialize(chunk)
+                .map_err(|_| IOError::from(IOErrorKind::InvalidData))?;
+            L_vec.push(point.into_projective())
+        }
+
+        for _ in 0..num_points {
+            let chunk = chunks.next().unwrap();
+            let point: EdwardsAffine = CanonicalDeserialize::deserialize(chunk)
+                .map_err(|_| IOError::from(IOErrorKind::InvalidData))?;
+            R_vec.push(point.into_projective())
+        }
+
+        let last_32_bytes = chunks.next().unwrap();
+
+        let a: Fr = CanonicalDeserialize::deserialize(last_32_bytes)
+            .map_err(|_| IOError::from(IOErrorKind::InvalidData))?;
+
+        Ok(IPAProof { L_vec, R_vec, a })
+    }
+    pub fn to_bytes(&self) -> IOResult<Vec<u8>> {
+        // We do not serialise the length. We assume that the deserialiser knows this.
+        let mut bytes = Vec::with_capacity(self.serialised_size());
+        for L in &self.L_vec {
+            L.serialize(&mut bytes)
+                .map_err(|_| IOError::from(IOErrorKind::InvalidData))?;
+        }
+        for R in &self.R_vec {
+            R.serialize(&mut bytes)
+                .map_err(|_| IOError::from(IOErrorKind::InvalidData))?;
+        }
+        self.a
+            .serialize(&mut bytes)
+            .map_err(|_| IOError::from(IOErrorKind::InvalidData))?;
+        Ok(bytes)
+    }
 }
 
 pub fn create(

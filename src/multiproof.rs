@@ -77,7 +77,7 @@ pub struct MultiPoint;
 #[derive(Clone, Debug)]
 pub struct ProverQuery {
     pub commitment: EdwardsProjective,
-    pub poly: LagrangeBasis,
+    pub poly: LagrangeBasis, // TODO: Make this a reference so that upstream libraries do not need to clone
     // Given a function f, we use z_i to denote the input point and y_i to denote the output, ie f(z_i) = y_i
     pub point: usize,
     pub result: Fr,
@@ -220,10 +220,43 @@ impl MultiPoint {
         }
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MultiPointProof {
     open_proof: IPAProof,
     g_x_comm: EdwardsProjective,
+}
+
+impl MultiPointProof {
+    pub fn from_bytes(bytes: &[u8], poly_degree: usize) -> crate::IOResult<MultiPointProof> {
+        use crate::{IOError, IOErrorKind};
+        use ark_serialize::CanonicalDeserialize;
+
+        let g_x_comm_bytes = &bytes[0..32];
+        let ipa_bytes = &bytes[32..]; // TODO: we should return a Result here incase the user gives us bad bytes
+
+        let point: EdwardsAffine = CanonicalDeserialize::deserialize(g_x_comm_bytes)
+            .map_err(|_| IOError::from(IOErrorKind::InvalidData))?;
+        let g_x_comm = point.into_projective();
+
+        let open_proof = IPAProof::from_bytes(ipa_bytes, poly_degree)?;
+        Ok(MultiPointProof {
+            open_proof,
+            g_x_comm,
+        })
+    }
+    pub fn to_bytes(&self) -> crate::IOResult<Vec<u8>> {
+        use crate::{IOError, IOErrorKind};
+        use ark_serialize::CanonicalSerialize;
+
+        let mut bytes = Vec::with_capacity(self.open_proof.serialised_size() + 32);
+
+        self.g_x_comm
+            .serialize(&mut bytes)
+            .map_err(|_| IOError::from(IOErrorKind::InvalidData))?;
+
+        bytes.extend(self.open_proof.to_bytes()?);
+        Ok(bytes)
+    }
 }
 
 impl MultiPointProof {
@@ -499,6 +532,10 @@ fn multiproof_consistency() {
         &[verifier_query_a, verifier_query_b],
         &mut verifier_transcript
     ));
+
+    let bytes = multiproof.to_bytes().unwrap();
+    let deserialised_proof = MultiPointProof::from_bytes(&bytes, crs.n).unwrap();
+    assert_eq!(deserialised_proof, multiproof);
 }
 
 #[test]
