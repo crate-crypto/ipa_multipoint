@@ -465,7 +465,17 @@ fn test_ipa_consistency() {
     ));
 
     let v_challenge = verifier_transcript.challenge_scalar(b"state");
-    assert_eq!(p_challenge, v_challenge)
+    assert_eq!(p_challenge, v_challenge);
+
+    // Check that serialisation and deserialisation is consistent
+    let bytes = proof.to_bytes().unwrap();
+    let deserialised_proof = IPAProof::from_bytes(&bytes, crs.n).unwrap();
+    assert_eq!(deserialised_proof, proof);
+
+    // Check that serialisation is consistent with other implementations
+    let got = hex::encode(&bytes);
+    let expected = "9cbba7fb5bf96ef7fd13e085f783e8b09263426dc5d17142acd0d851ff705fd0fcf15f2fad4f6578d95339e914b44ae6dce731d786bf252c92b5fc0d9c4461d310595f85da60a24822cf8aaa137f0db313069fe6bf32d9f41b4eeead08ea3b88956fc57860b5b479b8dd6d7b73c37a793b134b47197f6e9a1dfaa518cca52b29fab70bb94ed51588684776fe5da4d4e6aaee0126fff920f0f1b744f5a4dc3226eb0f8ec433351abb5cde8a53d6e4ecd86e5a00486dc41ae0feab9823137d132d288d91cf339a2e944b921fe0f886f333902a32026408f7e30b8b4193b7f9c2f128ae45c0c7cfe8cd752559b8dc191eba7f13536d173cc087de5425cbb7114f529107539160aa9f8706fd0ef56adf45ba1cce515b88fc43e8618586d207a25f1ce07ff1bbeff6dc1306c2125d21db49c9431240fd78865b010dc3132a7052bdeb23970d4af5304857423fafcd08e4e91d60a82006da73d2df57fa80588f753e3aaa12e294af01ecd06cdc2c69fb4603536355f523ae918ca24ba51aff3130dd5b3f7a962db4208154c268a83c1dfb65d8a91609403ffbb085cbe8f28c24ae3aa67a9776135e07ab675275a76ec54f8ff5355fe9e6419739d1e2f1f4951c43ce619758c8348f28e50000cb5c45915044a9e47bf9514c6eaf8ec88f31fb3cc7b52ba60e038ebd684a9f8efee1d345724764bebec999c230908759ac01cf30829cd981fff0e1fa629b4fc6702c824d7764901af6e9e0b5d36d1fc194ba2408311b0c";
+    assert_eq!(got, expected)
 }
 
 #[test]
@@ -533,9 +543,15 @@ fn multiproof_consistency() {
         &mut verifier_transcript
     ));
 
+    // Check that serialisation and deserialisation is consistent
     let bytes = multiproof.to_bytes().unwrap();
     let deserialised_proof = MultiPointProof::from_bytes(&bytes, crs.n).unwrap();
     assert_eq!(deserialised_proof, multiproof);
+
+    // Check that serialisation is consistent with other implementations
+    let got = hex::encode(bytes);
+    let expected = "1e575ed50234769345382d64f828d8dd65052cc623c4bfe6dd1ca0a8eb6940de717d20b92f592aea4e1a649644ee92d83813e8e296c71e2d32b40532f455d8b9b56baadafbe84808d784aa920836b73af49d758bd8bb1a2690df8b2450d2112e3a48a06378bc60dffa9cd9f80c9c4da0385a388fc8edeca1a740d76b3ab1d8d3ccb0387a0c2005432d6a52e98ca46c0649a69b6b02b9832b1e108199e6977c403624cfff05715445e37586444a27d8c97f18b3bbf417b442e8c8ab16dfe3b0e96ba20178280e6192f8e4e861a21215f394c1ff3057cd5492d1a5154ed8330f3f93f7f02079042c27d51c6299904eadaf6e1e290cc94920d143112ddb34cf2488131bc321ff0349150aad44563ac765905b15b30ac71ebb01c78d7e26e4f920219d040fb50fab3a233ea349fe5e09b1c7e56b311dc8e4505c04c60e27c86d8cbb72a0fe057815972f4bf2e126684a79ba5a3932a9713e059cd51d1a8f0599efa54172d4dfae7016ce2b7b2b325ba847782a2741ba560c158e38d10362a61a11538dd3c5e6742bb96901f53291649fbad13518c79c40af9733f5b54743f7fba3cda82d56894d0265f0befbc2e8a45612411e9bde4123263b1cde7c76ede1b21d97694382416b8c8f502f2c9af06bf250095122fbbfada1b683f588aa01a654a2ddd736135729835790845b3c403cc793bbfc808dba33b7af33bb43d49e06595a095ac84290e268e41d72ef9b93d4bafd0bf537179621a1c4936a5b7f713e9dd5f0cec2779933f46e0d8f48f15a81565de89df43e727e834de5386e446ca2696a13";
+    assert_eq!(got, expected)
 }
 
 #[test]
