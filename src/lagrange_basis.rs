@@ -139,7 +139,7 @@ impl PrecomputedWeights {
         weight
     }
 }
-
+// TODO: Lets make all of these methods pub(crate)
 impl LagrangeBasis {
     pub fn new(values: Vec<Fr>) -> LagrangeBasis {
         let domain = values.len();
