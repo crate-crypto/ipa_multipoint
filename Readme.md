@@ -2,6 +2,9 @@
 
 A polynomial commitment scheme for opening multiple polynomials at different points using the inner product argument.
 
+This library uses the bandersnatch curve and is described in [https://eprint.iacr.org/2021/1152.pdf].
+
+
 **Do not use in production.**
 
 ### Security 
