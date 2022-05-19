@@ -37,9 +37,7 @@ impl CRS {
         CRS { n, G, Q }
     }
 
-    /*
-     Evaluates the polynomial at a specific point.
-     */
+    /// Commits to a polynomial in lagrange form
     pub fn commit_lagrange_poly(&self, polynomial: &LagrangeBasis) -> EdwardsProjective {
         slow_vartime_multiscalar_mul(polynomial.values().iter(), self.G.iter())
     }
