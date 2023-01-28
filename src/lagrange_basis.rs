@@ -1,9 +1,13 @@
-use ark_ff::{batch_inversion, batch_inversion_and_mul, Field, One, Zero};
-use ark_poly::{domain, univariate::DensePolynomial, Polynomial, UVPolynomial};
+use ark_ff::{batch_inversion, batch_inversion_and_mul, Field, Zero};
 use bandersnatch::Fr;
 use std::{
     convert::TryFrom,
     ops::{Add, Mul, Sub},
+};
+#[cfg(test)]
+use {
+    ark_ff::One,
+    ark_poly::{univariate::DensePolynomial, Polynomial, UVPolynomial},
 };
 
 #[derive(Clone, Debug)]
@@ -26,7 +30,7 @@ impl Add<LagrangeBasis> for LagrangeBasis {
         self.values
             .iter_mut()
             .zip(rhs.values.into_iter())
-            .for_each(|(lhs, rhs)| *lhs = *lhs + rhs);
+            .for_each(|(lhs, rhs)| *lhs += rhs);
         self
     }
 }
@@ -34,9 +38,7 @@ impl Mul<Fr> for LagrangeBasis {
     type Output = LagrangeBasis;
 
     fn mul(mut self, rhs: Fr) -> Self::Output {
-        self.values
-            .iter_mut()
-            .for_each(|values| *values = *values * rhs);
+        self.values.iter_mut().for_each(|values| *values *= rhs);
         self
     }
 }
@@ -44,9 +46,7 @@ impl Sub<&Fr> for LagrangeBasis {
     type Output = LagrangeBasis;
 
     fn sub(mut self, rhs: &Fr) -> Self::Output {
-        self.values
-            .iter_mut()
-            .for_each(|values| *values = *values - rhs);
+        self.values.iter_mut().for_each(|values| *values -= rhs);
         self
     }
 }
@@ -155,8 +155,9 @@ impl LagrangeBasis {
     }
 
     // This is only for testing purposes
+    #[cfg(test)]
     pub(crate) fn interpolate(&self) -> DensePolynomial<Fr> {
-        let domain: Vec<_> = (0..self.domain).map(|i| Fr::from(i as u128)).collect();
+        let domain = (0..self.domain).map(|i| Fr::from(i as u128));
         let points: Vec<_> = domain
             .into_iter()
             .zip(self.values.iter().cloned())
@@ -322,6 +323,7 @@ fn simple_division() {
     assert_eq!(quotient_expected, quotient_coeff)
 }
 
+#[cfg(test)]
 // Taken from sapling-crypto -- O(n^2)
 fn interpolate(points: &[(Fr, Fr)]) -> Option<Vec<Fr>> {
     let max_degree_plus_one = points.len();

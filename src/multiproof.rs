@@ -3,20 +3,18 @@
 
 use std::collections::HashMap;
 
-use crate::ipa::{self, IPAProof};
+use crate::ipa::IPAProof;
 use crate::lagrange_basis::{LagrangeBasis, PrecomputedWeights};
-use crate::math_utils::inner_product;
 use crate::math_utils::powers_of;
 use crate::slow_vartime_multiscalar_mul;
 use crate::transcript::Transcript;
 use crate::transcript::TranscriptProtocol;
 use ark_ec::{AffineCurve, ProjectiveCurve};
+use ark_ff::batch_inversion;
 use ark_ff::PrimeField;
-use ark_ff::{batch_inversion, Field};
-use ark_ff::{One, Zero};
-use ark_poly::univariate::DensePolynomial;
-use ark_poly::{Polynomial, UVPolynomial};
-use bandersnatch::multi_scalar_mul;
+use ark_ff::Zero;
+#[cfg(test)]
+use ark_std::One;
 use bandersnatch::EdwardsAffine;
 use bandersnatch::EdwardsProjective;
 use bandersnatch::Fr;
@@ -66,8 +64,7 @@ fn generate_random_elements(num_required_points: usize, seed: &'static [u8]) -> 
     (0..)
         .into_iter()
         .map(|i| Fq::from(i as u128) + u)
-        .map(|x| EdwardsAffine::get_point_from_x(x, choose_largest))
-        .filter_map(|point| point)
+        .filter_map(|x| EdwardsAffine::get_point_from_x(x, choose_largest))
         .filter(|point| point.is_in_correct_subgroup_assuming_on_curve())
         .take(num_required_points)
         .collect()
@@ -76,16 +73,16 @@ fn generate_random_elements(num_required_points: usize, seed: &'static [u8]) -> 
 pub struct MultiPoint;
 
 #[derive(Clone, Debug)]
-pub struct ProverQuery {
+pub struct ProverQuery<'a> {
     pub commitment: EdwardsProjective,
-    pub poly: LagrangeBasis, // TODO: Make this a reference so that upstream libraries do not need to clone
+    poly: &'a LagrangeBasis, // TODO: Make this a reference so that upstream libraries do not need to clone
     // Given a function f, we use z_i to denote the input point and y_i to denote the output, ie f(z_i) = y_i
     pub point: usize,
     pub result: Fr,
 }
 
-impl From<ProverQuery> for VerifierQuery {
-    fn from(pq: ProverQuery) -> Self {
+impl From<ProverQuery<'_>> for VerifierQuery {
+    fn from(pq: ProverQuery<'_>) -> Self {
         VerifierQuery {
             commitment: pq.commitment,
             point: Fr::from(pq.point as u128),
@@ -101,9 +98,9 @@ pub struct VerifierQuery {
 
 //XXX: change to group_prover_queries_by_point
 fn group_prover_queries<'a>(
-    prover_queries: &'a [ProverQuery],
+    prover_queries: &'a [ProverQuery<'a>],
     challenges: &'a [Fr],
-) -> HashMap<usize, Vec<(&'a ProverQuery, &'a Fr)>> {
+) -> HashMap<usize, Vec<(&'a ProverQuery<'a>, &'a Fr)>> {
     // We want to group all of the polynomials which are evaluated at the same point together
     use itertools::Itertools;
     prover_queries
@@ -117,7 +114,7 @@ impl MultiPoint {
         crs: CRS,
         precomp: &PrecomputedWeights,
         transcript: &mut Transcript,
-        queries: Vec<ProverQuery>,
+        queries: Vec<ProverQuery<'_>>,
     ) -> MultiPointProof {
         transcript.domain_sep(b"multiproof");
         // 1. Compute `r`
@@ -217,7 +214,7 @@ impl MultiPoint {
 
         MultiPointProof {
             open_proof: g_3_ipa,
-            g_x_comm: g_x_comm,
+            g_x_comm,
         }
     }
 }
@@ -303,7 +300,7 @@ impl MultiPointProof {
             .sum();
 
         //4. Compute [g_1(X)] = E
-        let comms: Vec<_> = queries.into_iter().map(|query| query.commitment).collect();
+        let comms: Vec<_> = queries.iter().map(|query| query.commitment).collect();
         let g1_comm = slow_vartime_multiscalar_mul(helper_scalars.iter(), comms.iter());
 
         transcript.append_point(b"E", &g1_comm);
@@ -312,7 +309,7 @@ impl MultiPointProof {
         let g3_comm = g1_comm - self.g_x_comm;
 
         // Check IPA
-        let b = LagrangeBasis::evaluate_lagrange_coefficients(&precomp, crs.n, t); // TODO: we could put this as a method on PrecomputedWeights
+        let b = LagrangeBasis::evaluate_lagrange_coefficients(precomp, crs.n, t); // TODO: we could put this as a method on PrecomputedWeights
 
         self.open_proof
             .verify_multiexp(transcript, crs, b, g3_comm, t, g2_t)
@@ -352,7 +349,7 @@ fn open_multiproof_lagrange() {
 
     let prover_query = ProverQuery {
         commitment: poly_comm,
-        poly,
+        poly: &poly,
         point,
         result: y_i,
     };
@@ -392,13 +389,13 @@ fn open_multiproof_lagrange_2_polys() {
 
     let prover_query_i = ProverQuery {
         commitment: poly_comm,
-        poly: poly.clone(),
+        poly: &poly,
         point: z_i,
         result: y_i,
     };
     let prover_query_j = ProverQuery {
         commitment: poly_comm,
-        poly: poly,
+        poly: &poly,
         point: x_j,
         result: y_j,
     };
@@ -425,11 +422,12 @@ fn open_multiproof_lagrange_2_polys() {
 }
 #[test]
 fn test_ipa_consistency() {
+    use crate::math_utils::inner_product;
     use ark_serialize::CanonicalSerialize;
     let n = 256;
     let crs = CRS::new(n, b"eth_verkle_oct_2021");
     let precomp = PrecomputedWeights::new(n);
-    let input_point = Fr::from(2101 as u128);
+    let input_point = Fr::from(2101_u128);
 
     let poly: Vec<Fr> = (0..n).map(|i| Fr::from(((i % 32) + 1) as u128)).collect();
     let polynomial = LagrangeBasis::new(poly.clone());
@@ -449,7 +447,7 @@ fn test_ipa_consistency() {
     let mut bytes = [0u8; 32];
     p_challenge.serialize(&mut bytes[..]).unwrap();
     assert_eq!(
-        hex::encode(&bytes),
+        hex::encode(bytes),
         "50d7f61175ffcfefc0dd603943ec8da7568608564d509cd0d1fa71cc48dc3515"
     );
 
@@ -488,32 +486,32 @@ fn multiproof_consistency() {
 
     // 1 to 32 repeated 8 times
     let poly_a: Vec<Fr> = (0..n).map(|i| Fr::from(((i % 32) + 1) as u128)).collect();
-    let polynomial_a = LagrangeBasis::new(poly_a.clone());
+    let polynomial_a = LagrangeBasis::new(poly_a);
     // 32 to 1 repeated 8 times
     let poly_b: Vec<Fr> = (0..n)
         .rev()
         .map(|i| Fr::from(((i % 32) + 1) as u128))
         .collect();
-    let polynomial_b = LagrangeBasis::new(poly_b.clone());
+    let polynomial_b = LagrangeBasis::new(poly_b);
 
     let point_a = 0;
     let y_a = Fr::one();
 
     let point_b = 0;
-    let y_b = Fr::from(32 as u128);
+    let y_b = Fr::from(32_u128);
 
     let poly_comm_a = crs.commit_lagrange_poly(&polynomial_a);
     let poly_comm_b = crs.commit_lagrange_poly(&polynomial_b);
 
     let prover_query_a = ProverQuery {
         commitment: poly_comm_a,
-        poly: polynomial_a,
+        poly: &polynomial_a,
         point: point_a,
         result: y_a,
     };
     let prover_query_b = ProverQuery {
         commitment: poly_comm_b,
-        poly: polynomial_b,
+        poly: &polynomial_b,
         point: point_b,
         result: y_b,
     };
@@ -530,7 +528,7 @@ fn multiproof_consistency() {
     let mut bytes = [0u8; 32];
     p_challenge.serialize(&mut bytes[..]).unwrap();
     assert_eq!(
-        hex::encode(&bytes),
+        hex::encode(bytes),
         "f9c48313d1af5e069386805b966ce53a3d95794b82da3aac6d68fd629062a31c"
     );
 
@@ -559,7 +557,6 @@ fn multiproof_consistency() {
 fn crs_consistency() {
     // See: https://hackmd.io/1RcGSMQgT4uREaq1CCx_cg#Methodology
     use ark_serialize::CanonicalSerialize;
-    use bandersnatch::Fq;
     use sha2::{Digest, Sha256};
 
     let points = generate_random_elements(256, b"eth_verkle_oct_2021");
@@ -577,14 +574,14 @@ fn crs_consistency() {
     let mut bytes = [0u8; 32];
     points[0].serialize(&mut bytes[..]).unwrap();
     assert_eq!(
-        hex::encode(&bytes),
+        hex::encode(bytes),
         "22ac968a98ab6c50379fc8b039abc8fd9aca259f4746a05bfbdf12c86463c208",
         "the first point is incorrect"
     );
     let mut bytes = [0u8; 32];
     points[255].serialize(&mut bytes[..]).unwrap();
     assert_eq!(
-        hex::encode(&bytes),
+        hex::encode(bytes),
         "c8b4968a98ab6c50379fc8b039abc8fd9aca259f4746a05bfbdf12c86463c208",
         "the 256th (last) point is incorrect"
     );
@@ -593,11 +590,11 @@ fn crs_consistency() {
     for point in &points {
         let mut bytes = [0u8; 32];
         point.serialize(&mut bytes[..]).unwrap();
-        hasher.update(&bytes);
+        hasher.update(bytes);
     }
     let bytes = hasher.finalize().to_vec();
     assert_eq!(
-        hex::encode(&bytes),
+        hex::encode(bytes),
         "c390cbb4bc42019685d5a01b2fb8a536d4332ea4e128934d0ae7644163089e76",
         "unexpected point encountered"
     );
