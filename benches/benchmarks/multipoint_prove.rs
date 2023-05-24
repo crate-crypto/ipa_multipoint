@@ -1,20 +1,10 @@
-use ark_ff::One;
-use ark_std::rand;
-use ark_std::rand::SeedableRng;
 use ark_std::UniformRand;
-use bandersnatch::{EdwardsProjective, Fr};
-use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
-use ipa_multipoint::ipa::create;
-use ipa_multipoint::lagrange_basis::*;
-use ipa_multipoint::math_utils::inner_product;
-use ipa_multipoint::multiproof::*;
-use ipa_multipoint::slow_vartime_multiscalar_mul;
-use ipa_multipoint::transcript::TranscriptProtocol;
-
-use rand_chacha::ChaCha20Rng;
-use std::iter;
-
+use bandersnatch::Fr;
 use criterion::BenchmarkId;
+use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
+use ipa_multipoint::lagrange_basis::*;
+use ipa_multipoint::multiproof::*;
+use ipa_multipoint::transcript::Transcript;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("prove multiopen-deg-256");
@@ -42,11 +32,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
             let y_i = poly.evaluate_in_domain(point);
 
-            let prover_query = ProverQueryLagrange {
-                comm: poly_comm.clone(),
-                poly: poly,
-                x_i: point,
-                y_i,
+            let prover_query = ProverQuery {
+                commitment: poly_comm.clone(),
+                poly,
+                point,
+                result: y_i,
             };
 
             prover_queries.push(prover_query);
@@ -54,21 +44,20 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
         let precomp = PrecomputedWeights::new(n);
 
-        let mut transcript = Transcript::new(b"foo");
-
         group.bench_with_input(
             BenchmarkId::from_parameter(num_polynomials),
             &num_polynomials,
             |b, _| {
+                let mut transcript = Transcript::new(b"foo");
                 b.iter_batched(
-                    || (transcript.clone(), prover_queries.clone()),
+                    || (transcript, prover_queries.clone()),
                     |(mut transcript, prover_queries)| {
-                        MultiOpen::open_multiple_lagrange(
-                            &crs,
+                        black_box(MultiPoint::open(
+                            crs,
                             &precomp,
                             &mut transcript,
                             prover_queries,
-                        )
+                        ))
                     },
                     BatchSize::SmallInput,
                 )
