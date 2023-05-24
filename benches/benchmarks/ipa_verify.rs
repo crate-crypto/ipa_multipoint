@@ -34,7 +34,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         input_point,
     );
 
-    c.bench_function("verify multi exp2 256", |b| {
+    c.bench_function("ipa - verify (multi exp2 256)", |b| {
         b.iter(|| {
             let mut verifier_transcript = Transcript::new(b"ip_no_zk");
             black_box(proof.verify_multiexp(
@@ -48,7 +48,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         })
     });
 
-    c.bench_function("verify 256", |b| {
+    c.bench_function("ipa - verify (256)", |b| {
         b.iter(|| {
             let mut verifier_transcript = Transcript::new(b"ip_no_zk");
             black_box(proof.verify(

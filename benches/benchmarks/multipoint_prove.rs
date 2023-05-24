@@ -7,7 +7,7 @@ use ipa_multipoint::multiproof::*;
 use ipa_multipoint::transcript::Transcript;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
-    let mut group = c.benchmark_group("prove multiopen-deg-256");
+    let mut group = c.benchmark_group("multiproof - prove (256)");
 
     use ark_std::test_rng;
 
