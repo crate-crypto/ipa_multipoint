@@ -20,7 +20,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let poly = LagrangeBasis::new((0..n).map(|_| Fr::rand(&mut rng)).collect());
     let poly_comm = crs.commit_lagrange_poly(&poly);
 
-    for num_polynomials in [10_000, 20_000] {
+    for num_polynomials in [1, 1_000, 2_000, 4_000, 8_000, 16_000, 128_000] {
         let mut polys: Vec<LagrangeBasis> = Vec::with_capacity(num_polynomials);
         for _ in 0..num_polynomials {
             polys.push(poly.clone())
@@ -33,7 +33,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             let y_i = poly.evaluate_in_domain(point);
 
             let prover_query = ProverQuery {
-                commitment: poly_comm.clone(),
+                commitment: poly_comm,
                 poly,
                 point,
                 result: y_i,
@@ -48,12 +48,11 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             BenchmarkId::from_parameter(num_polynomials),
             &num_polynomials,
             |b, _| {
-                let mut transcript = Transcript::new(b"foo");
                 b.iter_batched(
-                    || (transcript, prover_queries.clone()),
+                    || (Transcript::new(b"foo"), prover_queries.clone()),
                     |(mut transcript, prover_queries)| {
                         black_box(MultiPoint::open(
-                            crs,
+                            crs.clone(),
                             &precomp,
                             &mut transcript,
                             prover_queries,

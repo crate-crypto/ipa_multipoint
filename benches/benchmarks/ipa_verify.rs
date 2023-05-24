@@ -22,7 +22,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     let mut prover_transcript = Transcript::new(b"ip_no_zk");
 
-    let a_lagrange = LagrangeBasis::new(a);
+    let a_lagrange = LagrangeBasis::new(a.clone());
     let a_comm = crs.commit_lagrange_poly(&a_lagrange);
 
     let proof = create(
