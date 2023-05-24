@@ -1,58 +1,51 @@
-use ark_std::rand;
 use ark_std::rand::SeedableRng;
 use ark_std::UniformRand;
 use bandersnatch::{EdwardsProjective, Fr};
-use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use ipa_multipoint::ipa::create;
+use ipa_multipoint::lagrange_basis::LagrangeBasis;
 use ipa_multipoint::math_utils::{inner_product, powers_of};
-use ipa_multipoint::slow_vartime_multiscalar_mul;
-use ipa_multipoint::transcript::TranscriptProtocol;
+use ipa_multipoint::multiproof::CRS;
+use ipa_multipoint::transcript::Transcript;
 
 use rand_chacha::ChaCha20Rng;
-use std::iter;
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     let n = 256;
-
     let mut rng = ChaCha20Rng::from_seed([0u8; 32]);
 
     let a: Vec<Fr> = (0..n).map(|_| Fr::rand(&mut rng)).collect();
-
     let input_point = Fr::rand(&mut rng);
     let b_vec = powers_of(input_point, n);
     let output_point = inner_product(&a, &b_vec);
 
-    let G: Vec<EdwardsProjective> = (0..n).map(|_| EdwardsProjective::rand(&mut rng)).collect();
-    let Q = EdwardsProjective::rand(&mut rng);
+    let crs = CRS::new(n, "lol".as_bytes());
 
     let mut prover_transcript = Transcript::new(b"ip_no_zk");
 
-    let P = slow_vartime_multiscalar_mul(a.iter(), G.iter());
+    let a_lagrange = LagrangeBasis::new(a);
+    let a_comm = crs.commit_lagrange_poly(&a_lagrange);
 
     let proof = create(
         &mut prover_transcript,
-        G.clone(),
-        &Q,
+        crs.clone(),
         a,
-        P,
+        a_comm,
         b_vec.clone(),
         input_point,
     );
 
-    let mut verifier_transcript = Transcript::new(b"ip_no_zk");
-
     c.bench_function("verify multi exp2 256", |b| {
         b.iter(|| {
-            proof.verify_multiexp(
+            let mut verifier_transcript = Transcript::new(b"ip_no_zk");
+            black_box(proof.verify_multiexp(
                 &mut verifier_transcript,
-                &G,
-                &Q,
-                n,
+                &crs,
                 b_vec.clone(),
-                P,
+                a_comm,
                 input_point,
                 output_point,
-            )
+            ))
         })
     });
 }
