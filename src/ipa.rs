@@ -8,16 +8,13 @@ use ark_ff::Field;
 use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use bandersnatch::multi_scalar_mul;
 use bandersnatch::EdwardsAffine;
 use bandersnatch::EdwardsProjective;
 use bandersnatch::Fr;
 use itertools::Itertools;
 
 use crate::{IOError, IOErrorKind, IOResult};
-use std::io::{Read, Write};
 
-use std::borrow::Borrow;
 use std::iter;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,6 +79,7 @@ impl IPAProof {
     }
 }
 
+#[allow(clippy::needless_borrow)]
 pub fn create(
     transcript: &mut Transcript,
     mut crs: CRS,
@@ -121,7 +119,7 @@ pub fn create(
     let mut L_vec: Vec<EdwardsProjective> = Vec::with_capacity(num_rounds as usize);
     let mut R_vec: Vec<EdwardsProjective> = Vec::with_capacity(num_rounds as usize);
 
-    for k in 0..num_rounds {
+    for _ in 0..num_rounds {
         let (a_L, a_R) = halve(a);
         let (b_L, b_R) = halve(b);
         let (G_L, G_R) = halve(G);
@@ -147,9 +145,9 @@ pub fn create(
         let x = transcript.challenge_scalar(b"x");
         let x_inv = x.inverse().unwrap();
         for i in 0..a_L.len() {
-            a_L[i] = a_L[i] + x * a_R[i];
-            b_L[i] = b_L[i] + x_inv * b_R[i];
-            G_L[i] = G_L[i] + G_R[i].mul(x_inv.into_repr());
+            a_L[i] += x * a_R[i];
+            b_L[i] += x_inv * b_R[i];
+            G_L[i] += G_R[i].mul(x_inv.into_repr());
         }
 
         a = a_L;
@@ -174,6 +172,7 @@ fn log2(n: usize) -> u32 {
 }
 
 impl IPAProof {
+    #[allow(clippy::needless_borrow)]
     pub fn verify(
         &self,
         transcript: &mut Transcript,
@@ -228,8 +227,8 @@ impl IPAProof {
             let (b_L, b_R) = halve(b);
 
             for i in 0..G_L.len() {
-                G_L[i] = G_L[i] + G_R[i].mul(x_inv.into_repr());
-                b_L[i] = b_L[i] + b_R[i] * x_inv;
+                G_L[i] += G_R[i].mul(x_inv.into_repr());
+                b_L[i] += b_R[i] * x_inv;
             }
             G = G_L;
             b = b_L;
@@ -318,6 +317,7 @@ impl IPAProof {
     // This is being committed incase someone goes through the git history
     // The fully unrolled code is not that intuitive, but maybe this semi
     // unrolled version can help you to figure out the gap
+    #[allow(clippy::needless_borrow)]
     pub fn verify_semi_multiexp(
         &self,
         transcript: &mut Transcript,
@@ -396,7 +396,6 @@ pub fn slow_vartime_multiscalar_mul<'a>(
     scalars: impl Iterator<Item = &'a Fr>,
     points: impl Iterator<Item = &'a EdwardsProjective>,
 ) -> EdwardsProjective {
-    use ark_ec::group::Group;
     use ark_ec::msm::VariableBaseMSM;
 
     let scalars: Vec<_> = scalars.into_iter().map(|s| s.into_repr()).collect();
@@ -423,11 +422,9 @@ mod tests {
     use super::*;
     use crate::math_utils::{inner_product, powers_of};
     use crate::multiproof::CRS;
-    use ark_std::rand;
     use ark_std::rand::SeedableRng;
     use ark_std::UniformRand;
     use rand_chacha::ChaCha20Rng;
-    use std::iter;
     #[test]
     fn test_create_IPAProof_proof() {
         let n = 8;
