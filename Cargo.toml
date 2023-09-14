@@ -18,6 +18,8 @@ rand_chacha = { version = "0.3.0", default-features = false }
 itertools = "0.10.1"
 sha2 = "0.9.8"
 hex = "0.4.3"
-[[bench]]
-name = "benchmark_main"
-harness = false
+banderwagon = { git = "https://github.com/crate-crypto/banderwagon" }
+
+# [[bench]]
+# name = "benchmark_main"
+# harness = false
