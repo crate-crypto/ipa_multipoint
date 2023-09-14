@@ -12,7 +12,6 @@ use ark_ec::{AffineCurve, ProjectiveCurve};
 use ark_ff::PrimeField;
 use ark_ff::{batch_inversion, Field};
 use ark_ff::{One, Zero};
-use ark_poly::univariate::DensePolynomial;
 use ark_poly::{Polynomial, UVPolynomial};
 use std::collections::HashMap;
 

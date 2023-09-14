@@ -1,5 +1,4 @@
 use ark_serialize::CanonicalSerialize;
-use bandersnatch::{EdwardsAffine, EdwardsProjective};
 use banderwagon::Element;
 
 use crate::{ipa::slow_vartime_multiscalar_mul, lagrange_basis::LagrangeBasis};

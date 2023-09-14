@@ -2,20 +2,15 @@
 use crate::crs::CRS;
 use crate::math_utils::inner_product;
 use crate::transcript::{Transcript, TranscriptProtocol};
-use ark_ec::group::Group;
-use ark_ec::{AffineCurve, ProjectiveCurve};
 use ark_ff::Field;
-use ark_ff::PrimeField;
-use ark_ff::{One, Zero};
+use ark_ff::One;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 use banderwagon::{multi_scalar_mul, Element, Fr};
 use itertools::Itertools;
 
 use crate::{IOError, IOErrorKind, IOResult};
-use std::io::{Read, Write};
 
-use std::borrow::Borrow;
 use std::iter;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
