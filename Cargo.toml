@@ -3,9 +3,7 @@ name = "ipa-multipoint"
 version = "0.1.0"
 edition = "2018"
 
-[[bench]]
-name = "benchmark_main"
-harness = false
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -23,6 +21,6 @@ sha2 = "0.9.8"
 hex = "0.4.3"
 banderwagon = { git = "https://github.com/crate-crypto/banderwagon" }
 
-# [[bench]]
-# name = "benchmark_main"
-# harness = false
+[[bench]]
+name = "benchmark_main"
+harness = false
