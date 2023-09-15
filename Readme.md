@@ -2,7 +2,7 @@
 
 A polynomial commitment scheme for opening multiple polynomials at different points using the inner product argument.
 
-This library uses the banderwagon prime subgroup (https://hackmd.io/@6iQDuIePQjyYBqDChYw_jg/BJ2-L6Nzc) built on top of bandersnatch curve described in [https://eprint.iacr.org/2021/1152.pdf].
+This library uses the banderwagon prime group (https://hackmd.io/@6iQDuIePQjyYBqDChYw_jg/BJ2-L6Nzc) built on top of bandersnatch curve described in [https://eprint.iacr.org/2021/1152.pdf].
 
 
 **Do not use in production.**
