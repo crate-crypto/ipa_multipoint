@@ -1,83 +1,26 @@
 // We get given multiple polynomials evaluated at different points
 #![allow(non_snake_case)]
 
-use std::collections::HashMap;
-
-use crate::ipa::{self, IPAProof};
+use crate::crs::CRS;
+use crate::ipa::{self, slow_vartime_multiscalar_mul, IPAProof};
 use crate::lagrange_basis::{LagrangeBasis, PrecomputedWeights};
 use crate::math_utils::inner_product;
 use crate::math_utils::powers_of;
-use crate::slow_vartime_multiscalar_mul;
 use crate::transcript::Transcript;
 use crate::transcript::TranscriptProtocol;
 use ark_ec::{AffineCurve, ProjectiveCurve};
 use ark_ff::PrimeField;
 use ark_ff::{batch_inversion, Field};
 use ark_ff::{One, Zero};
-use ark_poly::univariate::DensePolynomial;
 use ark_poly::{Polynomial, UVPolynomial};
-use bandersnatch::multi_scalar_mul;
-use bandersnatch::EdwardsAffine;
-use bandersnatch::EdwardsProjective;
-use bandersnatch::Fr;
-#[derive(Debug, Clone)]
-pub struct CRS {
-    pub n: usize,
-    pub G: Vec<EdwardsProjective>,
-    pub Q: EdwardsProjective,
-}
+use std::collections::HashMap;
 
-impl CRS {
-    pub fn new(n: usize, seed: &'static [u8]) -> CRS {
-        let G: Vec<_> = generate_random_elements(n, seed)
-            .into_iter()
-            .map(|affine_point| affine_point.into_projective())
-            .collect();
-        let Q = EdwardsProjective::prime_subgroup_generator();
-        CRS { n, G, Q }
-    }
-
-    /// Commits to a polynomial in lagrange form
-    pub fn commit_lagrange_poly(&self, polynomial: &LagrangeBasis) -> EdwardsProjective {
-        slow_vartime_multiscalar_mul(polynomial.values().iter(), self.G.iter())
-    }
-}
-
-impl std::ops::Index<usize> for CRS {
-    type Output = EdwardsProjective;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.G[index]
-    }
-}
-
-fn generate_random_elements(num_required_points: usize, seed: &'static [u8]) -> Vec<EdwardsAffine> {
-    use bandersnatch::Fq;
-    use sha2::{Digest, Sha256};
-
-    let mut hasher = Sha256::new();
-
-    hasher.update(seed);
-    let bytes = hasher.finalize().to_vec();
-
-    let u = bandersnatch::Fq::from_be_bytes_mod_order(&bytes);
-    let choose_largest = false;
-
-    (0..)
-        .into_iter()
-        .map(|i| Fq::from(i as u128) + u)
-        .map(|x| EdwardsAffine::get_point_from_x(x, choose_largest))
-        .filter_map(|point| point)
-        .filter(|point| point.is_in_correct_subgroup_assuming_on_curve())
-        .take(num_required_points)
-        .collect()
-}
-
+use banderwagon::{multi_scalar_mul, Element, Fr};
 pub struct MultiPoint;
 
 #[derive(Clone, Debug)]
 pub struct ProverQuery {
-    pub commitment: EdwardsProjective,
+    pub commitment: Element,
     pub poly: LagrangeBasis, // TODO: Make this a reference so that upstream libraries do not need to clone
     // Given a function f, we use z_i to denote the input point and y_i to denote the output, ie f(z_i) = y_i
     pub point: usize,
@@ -94,7 +37,7 @@ impl From<ProverQuery> for VerifierQuery {
     }
 }
 pub struct VerifierQuery {
-    pub commitment: EdwardsProjective,
+    pub commitment: Element,
     pub point: Fr,
     pub result: Fr,
 }
@@ -224,7 +167,7 @@ impl MultiPoint {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MultiPointProof {
     open_proof: IPAProof,
-    g_x_comm: EdwardsProjective,
+    g_x_comm: Element,
 }
 
 impl MultiPointProof {
@@ -235,9 +178,9 @@ impl MultiPointProof {
         let g_x_comm_bytes = &bytes[0..32];
         let ipa_bytes = &bytes[32..]; // TODO: we should return a Result here incase the user gives us bad bytes
 
-        let point: EdwardsAffine = CanonicalDeserialize::deserialize(g_x_comm_bytes)
+        let point: Element = CanonicalDeserialize::deserialize(g_x_comm_bytes)
             .map_err(|_| IOError::from(IOErrorKind::InvalidData))?;
-        let g_x_comm = point.into_projective();
+        let g_x_comm = point;
 
         let open_proof = IPAProof::from_bytes(ipa_bytes, poly_degree)?;
         Ok(MultiPointProof {
@@ -321,12 +264,13 @@ impl MultiPointProof {
 
 // TODO: we could probably get rid of this method altogether and just do this in the multiproof
 // TODO method
+// TODO: check that the point is actually not in the domain
 pub(crate) fn open_point_outside_of_domain(
     crs: CRS,
     precomp: &PrecomputedWeights,
     transcript: &mut Transcript,
     polynomial: LagrangeBasis,
-    commitment: EdwardsProjective,
+    commitment: Element,
     z_i: Fr,
 ) -> IPAProof {
     let a = polynomial.values().to_vec();
@@ -434,6 +378,11 @@ fn test_ipa_consistency() {
     let poly: Vec<Fr> = (0..n).map(|i| Fr::from(((i % 32) + 1) as u128)).collect();
     let polynomial = LagrangeBasis::new(poly.clone());
     let commitment = crs.commit_lagrange_poly(&polynomial);
+    assert_eq!(
+        hex::encode(commitment.to_bytes()),
+        "1b9dff8f5ebbac250d291dfe90e36283a227c64b113c37f1bfb9e7a743cdb128"
+    );
+
     let mut prover_transcript = Transcript::new(b"test");
 
     let proof = open_point_outside_of_domain(
@@ -450,12 +399,19 @@ fn test_ipa_consistency() {
     p_challenge.serialize(&mut bytes[..]).unwrap();
     assert_eq!(
         hex::encode(&bytes),
-        "50d7f61175ffcfefc0dd603943ec8da7568608564d509cd0d1fa71cc48dc3515"
+        "0a81881cbfd7d7197a54ebd67ed6a68b5867f3c783706675b34ece43e85e7306"
     );
 
     let mut verifier_transcript = Transcript::new(b"test");
     let b = LagrangeBasis::evaluate_lagrange_coefficients(&precomp, crs.n, input_point);
     let output_point = inner_product(&poly, &b);
+    let mut bytes = [0u8; 32];
+    output_point.serialize(&mut bytes[..]).unwrap();
+    assert_eq!(
+        hex::encode(bytes),
+        "4a353e70b03c89f161de002e8713beec0d740a5e20722fd5bd68b30540a33208"
+    );
+
     assert!(proof.verify_multiexp(
         &mut verifier_transcript,
         &crs,
@@ -475,7 +431,7 @@ fn test_ipa_consistency() {
 
     // Check that serialisation is consistent with other implementations
     let got = hex::encode(&bytes);
-    let expected = "9cbba7fb5bf96ef7fd13e085f783e8b09263426dc5d17142acd0d851ff705fd0fcf15f2fad4f6578d95339e914b44ae6dce731d786bf252c92b5fc0d9c4461d310595f85da60a24822cf8aaa137f0db313069fe6bf32d9f41b4eeead08ea3b88956fc57860b5b479b8dd6d7b73c37a793b134b47197f6e9a1dfaa518cca52b29fab70bb94ed51588684776fe5da4d4e6aaee0126fff920f0f1b744f5a4dc3226eb0f8ec433351abb5cde8a53d6e4ecd86e5a00486dc41ae0feab9823137d132d288d91cf339a2e944b921fe0f886f333902a32026408f7e30b8b4193b7f9c2f128ae45c0c7cfe8cd752559b8dc191eba7f13536d173cc087de5425cbb7114f529107539160aa9f8706fd0ef56adf45ba1cce515b88fc43e8618586d207a25f1ce07ff1bbeff6dc1306c2125d21db49c9431240fd78865b010dc3132a7052bdeb23970d4af5304857423fafcd08e4e91d60a82006da73d2df57fa80588f753e3aaa12e294af01ecd06cdc2c69fb4603536355f523ae918ca24ba51aff3130dd5b3f7a962db4208154c268a83c1dfb65d8a91609403ffbb085cbe8f28c24ae3aa67a9776135e07ab675275a76ec54f8ff5355fe9e6419739d1e2f1f4951c43ce619758c8348f28e50000cb5c45915044a9e47bf9514c6eaf8ec88f31fb3cc7b52ba60e038ebd684a9f8efee1d345724764bebec999c230908759ac01cf30829cd981fff0e1fa629b4fc6702c824d7764901af6e9e0b5d36d1fc194ba2408311b0c";
+    let expected = "273395a8febdaed38e94c3d874e99c911a47dd84616d54c55021d5c4131b507e46a4ec2c7e82b77ec2f533994c91ca7edaef212c666a1169b29c323eabb0cf690e0146638d0e2d543f81da4bd597bf3013e1663f340a8f87b845495598d0a3951590b6417f868edaeb3424ff174901d1185a53a3ee127fb7be0af42dda44bf992885bde279ef821a298087717ef3f2b78b2ede7f5d2ea1b60a4195de86a530eb247fd7e456012ae9a070c61635e55d1b7a340dfab8dae991d6273d099d9552815434cc1ba7bcdae341cf7928c6f25102370bdf4b26aad3af654d9dff4b3735661db3177342de5aad774a59d3e1b12754aee641d5f9cd1ecd2751471b308d2d8410add1c9fcc5a2b7371259f0538270832a98d18151f653efbc60895fab8be9650510449081626b5cd24671d1a3253487d44f589c2ff0da3557e307e520cf4e0054bbf8bdffaa24b7e4cce5092ccae5a08281ee24758374f4e65f126cacce64051905b5e2038060ad399c69ca6cb1d596d7c9cb5e161c7dcddc1a7ad62660dd4a5f69b31229b80e6b3df520714e4ea2b5896ebd48d14c7455e91c1ecf4acc5ffb36937c49413b7d1005dd6efbd526f5af5d61131ca3fcdae1218ce81c75e62b39100ec7f474b48a2bee6cef453fa1bc3db95c7c6575bc2d5927cbf7413181ac905766a4038a7b422a8ef2bf7b5059b5c546c19a33c1049482b9a9093f864913ca82290decf6e9a65bf3f66bc3ba4a8ed17b56d890a83bcbe74435a42499dec115";
     assert_eq!(got, expected)
 }
 
@@ -531,7 +487,7 @@ fn multiproof_consistency() {
     p_challenge.serialize(&mut bytes[..]).unwrap();
     assert_eq!(
         hex::encode(&bytes),
-        "f9c48313d1af5e069386805b966ce53a3d95794b82da3aac6d68fd629062a31c"
+        "eee8a80357ff74b766eba39db90797d022e8d6dee426ded71234241be504d519"
     );
 
     let mut verifier_transcript = Transcript::new(b"test");
@@ -551,54 +507,6 @@ fn multiproof_consistency() {
 
     // Check that serialisation is consistent with other implementations
     let got = hex::encode(bytes);
-    let expected = "1e575ed50234769345382d64f828d8dd65052cc623c4bfe6dd1ca0a8eb6940de717d20b92f592aea4e1a649644ee92d83813e8e296c71e2d32b40532f455d8b9b56baadafbe84808d784aa920836b73af49d758bd8bb1a2690df8b2450d2112e3a48a06378bc60dffa9cd9f80c9c4da0385a388fc8edeca1a740d76b3ab1d8d3ccb0387a0c2005432d6a52e98ca46c0649a69b6b02b9832b1e108199e6977c403624cfff05715445e37586444a27d8c97f18b3bbf417b442e8c8ab16dfe3b0e96ba20178280e6192f8e4e861a21215f394c1ff3057cd5492d1a5154ed8330f3f93f7f02079042c27d51c6299904eadaf6e1e290cc94920d143112ddb34cf2488131bc321ff0349150aad44563ac765905b15b30ac71ebb01c78d7e26e4f920219d040fb50fab3a233ea349fe5e09b1c7e56b311dc8e4505c04c60e27c86d8cbb72a0fe057815972f4bf2e126684a79ba5a3932a9713e059cd51d1a8f0599efa54172d4dfae7016ce2b7b2b325ba847782a2741ba560c158e38d10362a61a11538dd3c5e6742bb96901f53291649fbad13518c79c40af9733f5b54743f7fba3cda82d56894d0265f0befbc2e8a45612411e9bde4123263b1cde7c76ede1b21d97694382416b8c8f502f2c9af06bf250095122fbbfada1b683f588aa01a654a2ddd736135729835790845b3c403cc793bbfc808dba33b7af33bb43d49e06595a095ac84290e268e41d72ef9b93d4bafd0bf537179621a1c4936a5b7f713e9dd5f0cec2779933f46e0d8f48f15a81565de89df43e727e834de5386e446ca2696a13";
+    let expected = "4f53588244efaf07a370ee3f9c467f933eed360d4fbf7a19dfc8bc49b67df4711bf1d0a720717cd6a8c75f1a668cb7cbdd63b48c676b89a7aee4298e71bd7f4013d7657146aa9736817da47051ed6a45fc7b5a61d00eb23e5df82a7f285cc10e67d444e91618465ca68d8ae4f2c916d1942201b7e2aae491ef0f809867d00e83468fb7f9af9b42ede76c1e90d89dd789ff22eb09e8b1d062d8a58b6f88b3cbe80136fc68331178cd45a1df9496ded092d976911b5244b85bc3de41e844ec194256b39aeee4ea55538a36139211e9910ad6b7a74e75d45b869d0a67aa4bf600930a5f760dfb8e4df9938d1f47b743d71c78ba8585e3b80aba26d24b1f50b36fa1458e79d54c05f58049245392bc3e2b5c5f9a1b99d43ed112ca82b201fb143d401741713188e47f1d6682b0bf496a5d4182836121efff0fd3b030fc6bfb5e21d6314a200963fe75cb856d444a813426b2084dfdc49dca2e649cb9da8bcb47859a4c629e97898e3547c591e39764110a224150d579c33fb74fa5eb96427036899c04154feab5344873d36a53a5baefd78c132be419f3f3a8dd8f60f72eb78dd5f43c53226f5ceb68947da3e19a750d760fb31fa8d4c7f53bfef11c4b89158aa56b1f4395430e16a3128f88e234ce1df7ef865f2d2c4975e8c82225f578310c31fd41d265fd530cbfa2b8895b228a510b806c31dff3b1fa5c08bffad443d567ed0e628febdd22775776e0cc9cebcaea9c6df9279a5d91dd0ee5e7a0434e989a160005321c97026cb559f71db23360105460d959bcdf74bee22c4ad8805a1d497507";
     assert_eq!(got, expected)
-}
-
-#[test]
-fn crs_consistency() {
-    // See: https://hackmd.io/1RcGSMQgT4uREaq1CCx_cg#Methodology
-    use ark_serialize::CanonicalSerialize;
-    use bandersnatch::Fq;
-    use sha2::{Digest, Sha256};
-
-    let points = generate_random_elements(256, b"eth_verkle_oct_2021");
-    for point in &points {
-        let on_curve = point.is_on_curve();
-        let in_correct_subgroup = point.is_in_correct_subgroup_assuming_on_curve();
-        if !on_curve {
-            panic!("generated a point which is not on the curve")
-        }
-        if !in_correct_subgroup {
-            panic!("generated a point which is not in the prime subgroup")
-        }
-    }
-
-    let mut bytes = [0u8; 32];
-    points[0].serialize(&mut bytes[..]).unwrap();
-    assert_eq!(
-        hex::encode(&bytes),
-        "22ac968a98ab6c50379fc8b039abc8fd9aca259f4746a05bfbdf12c86463c208",
-        "the first point is incorrect"
-    );
-    let mut bytes = [0u8; 32];
-    points[255].serialize(&mut bytes[..]).unwrap();
-    assert_eq!(
-        hex::encode(&bytes),
-        "c8b4968a98ab6c50379fc8b039abc8fd9aca259f4746a05bfbdf12c86463c208",
-        "the 256th (last) point is incorrect"
-    );
-
-    let mut hasher = Sha256::new();
-    for point in &points {
-        let mut bytes = [0u8; 32];
-        point.serialize(&mut bytes[..]).unwrap();
-        hasher.update(&bytes);
-    }
-    let bytes = hasher.finalize().to_vec();
-    assert_eq!(
-        hex::encode(&bytes),
-        "c390cbb4bc42019685d5a01b2fb8a536d4332ea4e128934d0ae7644163089e76",
-        "unexpected point encountered"
-    );
 }

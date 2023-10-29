@@ -1,29 +1,22 @@
 #![allow(non_snake_case)]
+use crate::crs::CRS;
 use crate::math_utils::inner_product;
-use crate::multiproof::CRS;
 use crate::transcript::{Transcript, TranscriptProtocol};
-use ark_ec::group::Group;
-use ark_ec::{AffineCurve, ProjectiveCurve};
 use ark_ff::Field;
-use ark_ff::PrimeField;
-use ark_ff::{One, Zero};
+use ark_ff::One;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use bandersnatch::multi_scalar_mul;
-use bandersnatch::EdwardsAffine;
-use bandersnatch::EdwardsProjective;
-use bandersnatch::Fr;
+
+use banderwagon::{multi_scalar_mul, Element, Fr};
 use itertools::Itertools;
 
 use crate::{IOError, IOErrorKind, IOResult};
-use std::io::{Read, Write};
 
-use std::borrow::Borrow;
 use std::iter;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IPAProof {
-    pub(crate) L_vec: Vec<EdwardsProjective>,
-    pub(crate) R_vec: Vec<EdwardsProjective>,
+    pub(crate) L_vec: Vec<Element>,
+    pub(crate) R_vec: Vec<Element>,
     pub(crate) a: Fr,
 }
 
@@ -45,16 +38,16 @@ impl IPAProof {
 
         for _ in 0..num_points {
             let chunk = chunks.next().unwrap();
-            let point: EdwardsAffine = CanonicalDeserialize::deserialize(chunk)
+            let point: Element = CanonicalDeserialize::deserialize(chunk)
                 .map_err(|_| IOError::from(IOErrorKind::InvalidData))?;
-            L_vec.push(point.into_projective())
+            L_vec.push(point)
         }
 
         for _ in 0..num_points {
             let chunk = chunks.next().unwrap();
-            let point: EdwardsAffine = CanonicalDeserialize::deserialize(chunk)
+            let point: Element = CanonicalDeserialize::deserialize(chunk)
                 .map_err(|_| IOError::from(IOErrorKind::InvalidData))?;
-            R_vec.push(point.into_projective())
+            R_vec.push(point)
         }
 
         let last_32_bytes = chunks.next().unwrap();
@@ -86,7 +79,7 @@ pub fn create(
     transcript: &mut Transcript,
     mut crs: CRS,
     mut a_vec: Vec<Fr>,
-    a_comm: EdwardsProjective,
+    a_comm: Element,
     mut b_vec: Vec<Fr>,
     // This is the z in f(z)
     input_point: Fr,
@@ -114,12 +107,12 @@ pub fn create(
     transcript.append_scalar(b"output point", &output_point);
 
     let w = transcript.challenge_scalar(b"w");
-    let Q = (&crs.Q).mul(&w); // XXX: It would not hurt to add this augmented point into the transcript
+    let Q = crs.Q * w; // XXX: It would not hurt to add this augmented point into the transcript
 
     let num_rounds = log2(n);
 
-    let mut L_vec: Vec<EdwardsProjective> = Vec::with_capacity(num_rounds as usize);
-    let mut R_vec: Vec<EdwardsProjective> = Vec::with_capacity(num_rounds as usize);
+    let mut L_vec: Vec<Element> = Vec::with_capacity(num_rounds as usize);
+    let mut R_vec: Vec<Element> = Vec::with_capacity(num_rounds as usize);
 
     for k in 0..num_rounds {
         let (a_L, a_R) = halve(a);
@@ -149,7 +142,7 @@ pub fn create(
         for i in 0..a_L.len() {
             a_L[i] = a_L[i] + x * a_R[i];
             b_L[i] = b_L[i] + x_inv * b_R[i];
-            G_L[i] = G_L[i] + G_R[i].mul(x_inv.into_repr());
+            G_L[i] = G_L[i] + G_R[i] * x_inv;
         }
 
         a = a_L;
@@ -179,7 +172,7 @@ impl IPAProof {
         transcript: &mut Transcript,
         mut crs: CRS,
         mut b: Vec<Fr>,
-        a_comm: EdwardsProjective,
+        a_comm: Element,
         input_point: Fr,
         output_point: Fr,
     ) -> bool {
@@ -202,11 +195,11 @@ impl IPAProof {
         transcript.append_scalar(b"output point", &output_point);
 
         let w = transcript.challenge_scalar(b"w");
-        let Q = (&crs.Q).mul(&w);
+        let Q = crs.Q * w;
 
         let num_rounds = self.L_vec.len();
 
-        let mut a_comm = a_comm + (Q.mul(output_point.into_repr()));
+        let mut a_comm = a_comm + (Q * output_point);
 
         let challenges = generate_challenges(self, transcript);
         let mut challenges_inv = challenges.clone();
@@ -220,7 +213,7 @@ impl IPAProof {
             let L = self.L_vec[i];
             let R = self.R_vec[i];
 
-            a_comm = a_comm + L.mul(x.into_repr()) + R.mul(x_inv.into_repr());
+            a_comm = a_comm + (L * x) + (R * x_inv);
         }
 
         for x_inv in challenges_inv.iter() {
@@ -228,7 +221,7 @@ impl IPAProof {
             let (b_L, b_R) = halve(b);
 
             for i in 0..G_L.len() {
-                G_L[i] = G_L[i] + G_R[i].mul(x_inv.into_repr());
+                G_L[i] = G_L[i] + G_R[i] * *x_inv;
                 b_L[i] = b_L[i] + b_R[i] * x_inv;
             }
             G = G_L;
@@ -237,7 +230,7 @@ impl IPAProof {
         assert_eq!(G.len(), 1);
         assert_eq!(b.len(), 1);
 
-        let exp_P = G[0].mul(self.a.into_repr()) + Q.mul((self.a * b[0]).into_repr());
+        let exp_P = (G[0] * self.a) + Q * (self.a * b[0]);
 
         exp_P == a_comm
     }
@@ -246,7 +239,7 @@ impl IPAProof {
         transcript: &mut Transcript,
         crs: &CRS,
         b_vec: Vec<Fr>,
-        a_comm: EdwardsProjective,
+        a_comm: Element,
         input_point: Fr,
         output_point: Fr,
     ) -> bool {
@@ -323,7 +316,7 @@ impl IPAProof {
         transcript: &mut Transcript,
         crs: &CRS,
         b_Vec: Vec<Fr>,
-        a_comm: EdwardsProjective,
+        a_comm: Element,
         input_point: Fr,
         output_point: Fr,
     ) -> bool {
@@ -343,9 +336,9 @@ impl IPAProof {
         transcript.append_scalar(b"output point", &output_point);
 
         let w = transcript.challenge_scalar(b"w");
-        let Q = (&crs.Q).mul(&w);
+        let Q = crs.Q * w;
 
-        let a_comm = a_comm + (Q.mul(output_point.into_repr()));
+        let a_comm = a_comm + (Q * output_point);
 
         let challenges = generate_challenges(self, transcript);
         let mut challenges_inv = challenges.clone();
@@ -378,7 +371,7 @@ impl IPAProof {
         let b_0 = inner_product(&b_Vec, &g_i);
         let G_0 = slow_vartime_multiscalar_mul(g_i.iter(), crs.G.iter()); // TODO: Optimise the majority of the time is spent on this vector, precompute
 
-        let exp_P = G_0.mul(self.a.into_repr()) + Q.mul((self.a * b_0).into_repr());
+        let exp_P = (G_0 * self.a) + Q * (self.a * b_0);
 
         exp_P == P
     }
@@ -394,14 +387,11 @@ fn to_bits(n: usize, bits_needed: usize) -> impl Iterator<Item = u8> {
 // TODO check performance of that versus the current method
 pub fn slow_vartime_multiscalar_mul<'a>(
     scalars: impl Iterator<Item = &'a Fr>,
-    points: impl Iterator<Item = &'a EdwardsProjective>,
-) -> EdwardsProjective {
-    use ark_ec::group::Group;
-    use ark_ec::msm::VariableBaseMSM;
-
-    let scalars: Vec<_> = scalars.into_iter().map(|s| s.into_repr()).collect();
-    let points: Vec<_> = points.map(|p| p.into_affine()).collect();
-    VariableBaseMSM::multi_scalar_mul(&points, &scalars)
+    points: impl Iterator<Item = &'a Element>,
+) -> Element {
+    let scalars: Vec<_> = scalars.into_iter().copied().collect();
+    let points: Vec<_> = points.into_iter().copied().collect();
+    multi_scalar_mul(&points, &scalars)
 }
 
 fn generate_challenges(proof: &IPAProof, transcript: &mut Transcript) -> Vec<Fr> {
@@ -421,8 +411,8 @@ fn generate_challenges(proof: &IPAProof, transcript: &mut Transcript) -> Vec<Fr>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::crs::CRS;
     use crate::math_utils::{inner_product, powers_of};
-    use crate::multiproof::CRS;
     use ark_std::rand;
     use ark_std::rand::SeedableRng;
     use ark_std::UniformRand;

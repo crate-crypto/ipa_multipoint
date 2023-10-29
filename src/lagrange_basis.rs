@@ -1,5 +1,5 @@
 use ark_ff::{batch_inversion, batch_inversion_and_mul, Field, One, Zero};
-use ark_poly::{domain, univariate::DensePolynomial, Polynomial, UVPolynomial};
+use ark_poly::{univariate::DensePolynomial, Polynomial, UVPolynomial};
 use bandersnatch::Fr;
 use std::{
     convert::TryFrom,

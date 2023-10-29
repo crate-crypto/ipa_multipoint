@@ -1,9 +1,9 @@
 use ark_ff::PrimeField;
-use bandersnatch::{EdwardsProjective, Fr};
+use banderwagon::{Element, Fr};
 pub trait TranscriptProtocol {
     /// Compute a `label`ed challenge variable.
     fn challenge_scalar(&mut self, label: &'static [u8]) -> Fr;
-    fn append_point(&mut self, label: &'static [u8], point: &EdwardsProjective);
+    fn append_point(&mut self, label: &'static [u8], point: &Element);
     fn append_scalar(&mut self, label: &'static [u8], point: &Fr);
     fn domain_sep(&mut self, label: &'static [u8]);
 }
@@ -47,7 +47,7 @@ impl TranscriptProtocol for Transcript {
         scalar
     }
 
-    fn append_point(&mut self, label: &'static [u8], point: &EdwardsProjective) {
+    fn append_point(&mut self, label: &'static [u8], point: &Element) {
         let mut bytes = [0u8; 32];
         point.serialize(&mut bytes[..]).unwrap();
         self.append_message(&bytes, label)
@@ -71,6 +71,7 @@ mod tests {
         let mut tr = Transcript::new(b"simple_protocol");
         let first_challenge = tr.challenge_scalar(b"simple_challenge");
         let second_challenge = tr.challenge_scalar(b"simple_challenge");
+        // We can never even accidentally, generate the same challenge
         assert_ne!(first_challenge, second_challenge)
     }
     #[test]
@@ -121,13 +122,13 @@ mod tests {
     fn test_vector_4() {
         use ark_ec::ProjectiveCurve;
         let mut tr = Transcript::new(b"simple_protocol");
-        let generator = EdwardsProjective::prime_subgroup_generator();
+        let generator = Element::prime_subgroup_generator();
 
         tr.append_point(b"generator", &generator);
 
         let challenge = tr.challenge_scalar(b"simple_challenge");
 
-        let expected = "c3d390ff8ef3242c4ec3508d9c5f66d8c9f6aae3bde9ce7b4e1a53b9a6e9ac18";
+        let expected = "8c2dafe7c0aabfa9ed542bb2cbf0568399ae794fc44fdfd7dff6cc0e6144921c";
 
         let got = scalar_to_hex(&challenge);
         assert_eq!(got, expected)
